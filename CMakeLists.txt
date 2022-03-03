@@ -195,6 +195,12 @@ target_sources(leveldb
         "util/options.cc"
         "util/random.h"
         "util/status.cc"
+        # "nvm_mod/persistent_skiplist.h"
+        # "nvm_mod/persistent_skiplist.cc"
+        "nvm_mod/skiplist_pmem_manager.h"
+        "nvm_mod/skiplist_pmem_manager.cc"
+        "nvm_mod/nvm_option.h"
+        "nvm_mod/nvm_option.cc"
 
         # Generator expressions
         # https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html?highlight=version_greater
@@ -291,6 +297,12 @@ if (HAVE_TCMALLOC)
 endif (HAVE_TCMALLOC)
 
 # 查找相关的库的依赖
+#pmdk
+find_library(PMEM_LIBRARIES NAMES pmem libpmem)
+find_path(PMEM_INCLUDE_DIRS libpmem.h)
+include_directories(${PMEM_INCLUDE_DIRS})
+target_link_libraries(leveldb ${PMEM_LIBRARIES})
+
 # Needed by port_stdcxx.h
 find_package(Threads REQUIRED)
 target_link_libraries(leveldb Threads::Threads)
@@ -299,6 +311,7 @@ add_executable(leveldbutil
         "db/leveldbutil.cc"
         )
 target_link_libraries(leveldbutil leveldb)
+
 
 # LEVELDB_BUILD_TESTS
 if (LEVELDB_BUILD_TESTS)
@@ -390,6 +403,8 @@ if (LEVELDB_BUILD_TESTS)
         leveldb_test("util/crc32c_test.cc")
         leveldb_test("util/hash_test.cc")
         leveldb_test("util/logging_test.cc")
+
+        leveldb_test("nvm_mod/skiplist_pmem_manager_test.cc")
 
         # TODO(costan): This test also uses
         #               "util/env_{posix|windows}_test_helper.h"
