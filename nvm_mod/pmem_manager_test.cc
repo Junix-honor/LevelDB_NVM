@@ -1,11 +1,10 @@
-#include "nvm_mod/skiplist_pmem_manager.h"
-
 #include <iostream>
 
 #include "util/random.h"
 
 #include "gtest/gtest.h"
 #include "nvm_mod/nvm_option.h"
+#include "nvm_mod/pmem_manager.h"
 
 namespace leveldb {
 
@@ -21,7 +20,7 @@ TEST(SkipListPmemManagerTest, Sample) {
   //创建
   {
     std::vector<std::pair<size_t, char*>> allocated;
-    SkipListPmemManager allocator(&nvm_option, filename);
+    PmemManager allocator(&nvm_option, filename);
     allocator.clear();
 
     for (int i = 0; i < N; i++) {
@@ -69,7 +68,7 @@ TEST(SkipListPmemManagerTest, Sample) {
 
   //恢复
   {
-    SkipListPmemManager allocator(&nvm_option, filename);
+    PmemManager allocator(&nvm_option, filename);
     ASSERT_EQ(allocator.MemoryUsage(), bytes);
   }
 }

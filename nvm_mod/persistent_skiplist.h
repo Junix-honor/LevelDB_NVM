@@ -4,12 +4,11 @@
 #include <cassert>
 #include <cstdlib>
 
+#include "util/allocator.h"
 #include "util/random.h"
 
-#include "nvm_mod/skiplist_pmem_manager.h"
-
 namespace leveldb {
-class SkipListPmemManager;
+class Allocator;
 
 template <typename Key, class Comparator>
 class PersistentSkipList {
@@ -42,7 +41,7 @@ class PersistentSkipList {
   // Create a new SkipList object that will use "cmp" for comparing keys,
   // and will allocate memory using "*arena".  Objects allocated in the arena
   // must remain allocated for the lifetime of the skiplist object.
-  explicit PersistentSkipList(Comparator cmp, SkipListPmemManager* allocator);
+  explicit PersistentSkipList(Comparator cmp, Allocator* allocator);
 
   PersistentSkipList(const PersistentSkipList&) = delete;
   PersistentSkipList& operator=(const PersistentSkipList&) = delete;
@@ -127,7 +126,7 @@ class PersistentSkipList {
 
   // Immutable after construction
   Comparator const compare_;
-  SkipListPmemManager* const allocator_;  // Arena used for allocations of nodes
+  Allocator* const allocator_;  // Arena used for allocations of nodes
 
   Node* head_;
 
@@ -358,8 +357,8 @@ PersistentSkipList<Key, Comparator>::FindLast() const {
 
 // skiplist构造函数
 template <typename Key, class Comparator>
-PersistentSkipList<Key, Comparator>::PersistentSkipList(
-    Comparator cmp, SkipListPmemManager* allocator)
+PersistentSkipList<Key, Comparator>::PersistentSkipList(Comparator cmp,
+                                                        Allocator* allocator)
     : compare_(cmp), allocator_(allocator), rnd_(0xdeadbeef) {
   pmem_max_height_ = (int32_t*)GetPmemMaxHeight();
   sequence = (uint64_t*)GetSequence();

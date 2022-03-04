@@ -1,21 +1,18 @@
-#include "skiplist_pmem_manager.h"
+#include "pmem_manager.h"
 
 namespace leveldb {
-SkipListPmemManager::SkipListPmemManager(NVMOption* nvm_option,
-                                         std::string filename) {
+PmemManager::PmemManager(NVMOption* nvm_option, std::string filename) {
   write_buffer_size = nvm_option->write_buffer_size;
   pmem_path = nvm_option->pmem_path;
   pmem_file_name = filename;
   OpenNVMFile();
-  memory_usage_ = (int32_t*)GetMemoryUsage();
+  memory_usage_ = (size_t*)GetMemoryUsage();
   alloc_bytes_remaining_ = write_buffer_size - *memory_usage_;
   alloc_ptr_ = GetDataStart() + *memory_usage_;
 }
-SkipListPmemManager::~SkipListPmemManager() {
-  pmem_unmap(pmem_addr, mapped_len);
-}
+PmemManager::~PmemManager() { pmem_unmap(pmem_addr, mapped_len); }
 
-void SkipListPmemManager::OpenNVMFile() {
+void PmemManager::OpenNVMFile() {
   char buf[100];
   snprintf(buf, sizeof(buf), "%s/%s", pmem_path.c_str(),
            pmem_file_name.c_str());
@@ -26,7 +23,7 @@ void SkipListPmemManager::OpenNVMFile() {
   assert(pmem_addr != nullptr);
 }
 
-char* SkipListPmemManager::AllocateAligned(size_t bytes) {
+char* PmemManager::AllocateAligned(size_t bytes) {
   const int align = (sizeof(void*) > 8) ? sizeof(void*) : 8;
   static_assert((align & (align - 1)) == 0,
                 "Pointer size should be a power of 2");
@@ -46,13 +43,13 @@ char* SkipListPmemManager::AllocateAligned(size_t bytes) {
   assert((reinterpret_cast<uintptr_t>(result) & (align - 1)) == 0);
   return result;
 }
-void SkipListPmemManager::Sync() {
+void PmemManager::Sync() {
   if (is_pmem)
     pmem_persist(pmem_addr, mapped_len);
   else
     pmem_msync(pmem_addr, mapped_len);
 }
-void SkipListPmemManager::clear() {
+void PmemManager::clear() {
   *memory_usage_ = 0;
   alloc_bytes_remaining_ = write_buffer_size;
   alloc_ptr_ = GetDataStart();

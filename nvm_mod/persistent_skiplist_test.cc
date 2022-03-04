@@ -17,7 +17,7 @@
 
 #include "gtest/gtest.h"
 #include "nvm_mod/nvm_option.h"
-#include "nvm_mod/skiplist_pmem_manager.h"
+#include "nvm_mod/pmem_manager.h"
 
 namespace leveldb {
 
@@ -54,7 +54,7 @@ TEST(SkipTest, Empty) {
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
   nvm_option.pmem_path = "/mnt/d";
   std::string filename = "test.pool";
-  SkipListPmemManager allocator(&nvm_option, filename);
+  PmemManager allocator(&nvm_option, filename);
   Comparator cmp;
 
   PersistentSkipList<Key, Comparator> list(cmp, &allocator);
@@ -84,7 +84,7 @@ TEST(SkipTest, InsertAndLookup) {
 
   //创建
   {
-    SkipListPmemManager allocator(&nvm_option, filename);
+    PmemManager allocator(&nvm_option, filename);
     PersistentSkipList<Key, Comparator> list(cmp, &allocator);
     for (int i = 0; i < N; i++) {
       std::string key = strRand(10);
@@ -147,7 +147,7 @@ TEST(SkipTest, InsertAndLookup) {
   }
   //恢复
   {
-    SkipListPmemManager allocator(&nvm_option, filename);
+    PmemManager allocator(&nvm_option, filename);
     PersistentSkipList<Key, Comparator> list(cmp, &allocator);
     // Forward iteration test
     {

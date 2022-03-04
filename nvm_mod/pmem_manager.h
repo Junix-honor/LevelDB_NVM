@@ -6,16 +6,18 @@
 #include <libpmem.h>
 #include <string.h>
 
+#include "util/allocator.h"
+
 #include "nvm_mod/nvm_option.h"
 namespace leveldb {
-class SkipListPmemManager {
+class PmemManager : public Allocator {
  public:
-  SkipListPmemManager(NVMOption* nvm_option, std::string filename);
+  PmemManager(NVMOption* nvm_option, std::string filename);
 
-  SkipListPmemManager(const SkipListPmemManager&) = delete;
-  SkipListPmemManager& operator=(const SkipListPmemManager&) = delete;
+  PmemManager(const PmemManager&) = delete;
+  PmemManager& operator=(const PmemManager&) = delete;
 
-  ~SkipListPmemManager();
+  ~PmemManager();
 
   // Return a pointer to a newly allocated memory block of "bytes" bytes.
   char* Allocate(size_t bytes);
@@ -25,15 +27,15 @@ class SkipListPmemManager {
 
   // Returns an estimate of the total memory usage of data allocated
   // by the arena.
-  int32_t MemoryUsage() const { return *memory_usage_; }
+  size_t MemoryUsage() const { return *memory_usage_; }
 
   void clear();
   void Sync();
 
  public:
   //偏移量
-  static const int MEMORY_USAGE_OFFSET = 0;  // MEMORY_USAGE偏移量
-  static const int MEMORY_USAGE_SIZE = 4;    // MEMORY_USAGE大小
+  static const int MEMORY_USAGE_OFFSET = 0;             // MEMORY_USAGE偏移量
+  static const int MEMORY_USAGE_SIZE = sizeof(size_t);  // MEMORY_USAGE大小
 
   static const int DATA_OFFSET =
       MEMORY_USAGE_OFFSET + MEMORY_USAGE_SIZE;  // 数据偏移量
@@ -49,7 +51,7 @@ class SkipListPmemManager {
   size_t alloc_bytes_remaining_;
 
   // Total memory usage of the arena.
-  int32_t* memory_usage_;
+  size_t* memory_usage_;
 
   std::string pmem_path;
   size_t write_buffer_size;
@@ -59,7 +61,7 @@ class SkipListPmemManager {
   size_t mapped_len;
   int is_pmem;
 };
-inline char* SkipListPmemManager::Allocate(size_t bytes) {
+inline char* PmemManager::Allocate(size_t bytes) {
   assert(bytes > 0);
   if (bytes <= alloc_bytes_remaining_) {
     char* result = alloc_ptr_;

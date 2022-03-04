@@ -11,9 +11,10 @@
 #include <cstdint>
 #include <vector>
 
+#include "util/allocator.h"
 namespace leveldb {
 
-class Arena {
+class Arena : public Allocator {
  public:
   Arena();
 
@@ -33,6 +34,10 @@ class Arena {
   size_t MemoryUsage() const {
     return memory_usage_.load(std::memory_order_relaxed);
   }
+
+  void clear() {}
+  void Sync() {}
+  char* GetDataStart() { return nullptr; }
 
  private:
   char* AllocateFallback(size_t bytes);

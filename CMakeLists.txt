@@ -175,6 +175,7 @@ target_sources(leveldb
         "table/table.cc"
         "table/two_level_iterator.cc"
         "table/two_level_iterator.h"
+        "util/allocator.h"
         "util/arena.cc"
         "util/arena.h"
         "util/bloom.cc"
@@ -197,8 +198,8 @@ target_sources(leveldb
         "util/status.cc"
         "nvm_mod/nvm_option.h"
         "nvm_mod/nvm_option.cc"
-        "nvm_mod/skiplist_pmem_manager.h"
-        "nvm_mod/skiplist_pmem_manager.cc"
+        "nvm_mod/pmem_manager.h"
+        "nvm_mod/pmem_manager.cc"
         "nvm_mod/persistent_skiplist.h"
         # "nvm_mod/persistent_skiplist.cc"
 
@@ -404,7 +405,7 @@ if (LEVELDB_BUILD_TESTS)
         leveldb_test("util/hash_test.cc")
         leveldb_test("util/logging_test.cc")
 
-        leveldb_test("nvm_mod/skiplist_pmem_manager_test.cc")
+        leveldb_test("nvm_mod/pmem_manager_test.cc")
         leveldb_test("nvm_mod/persistent_skiplist_test.cc")
 
         # TODO(costan): This test also uses
