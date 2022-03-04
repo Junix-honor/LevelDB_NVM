@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
+#include <string>
 
 #include "util/allocator.h"
 #include "util/random.h"
