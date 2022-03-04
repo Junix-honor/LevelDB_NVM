@@ -12,15 +12,15 @@ namespace leveldb {
 TEST(SkipListPmemManagerTest, Sample) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  nvm_option.pmem_path = "/mnt/d";
+  nvm_option.pmem_path = "/mnt/hjxPMem";
   std::string filename = "test.pool";
 
-  std::vector<std::pair<size_t, char*>> allocated;
   const int N = 100000;
   size_t bytes = 0;
   Random rnd(301);
   //创建
   {
+    std::vector<std::pair<size_t, char*>> allocated;
     SkipListPmemManager allocator(&nvm_option, filename);
     allocator.clear();
 
@@ -61,6 +61,7 @@ TEST(SkipListPmemManagerTest, Sample) {
         ASSERT_EQ(int(p[b]) & 0xff, i % 256);
       }
     }
+    allocator.Sync();
     std::cout << "++++++++++create++++++++++" << std::endl;
     std::cout << "bytes:" << bytes << std::endl;
     std::cout << "mem usages:" << allocator.MemoryUsage() << std::endl;
@@ -70,15 +71,6 @@ TEST(SkipListPmemManagerTest, Sample) {
   {
     SkipListPmemManager allocator(&nvm_option, filename);
     ASSERT_EQ(allocator.MemoryUsage(), bytes);
-
-    for (size_t i = 0; i < allocated.size(); i++) {
-      size_t num_bytes = allocated[i].first;
-      const char* p = allocated[i].second;
-      for (size_t b = 0; b < num_bytes; b++) {
-        // Check the "i"th allocation for the known bit pattern
-        ASSERT_EQ(int(p[b]) & 0xff, i % 256);
-      }
-    }
   }
 }
 
