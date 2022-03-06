@@ -7,6 +7,7 @@
 
 #include "util/allocator.h"
 
+#include "libpmem.h"
 #include "nvm_mod/persistent_skiplist.h"
 namespace leveldb {
 class InternalKeyComparator;
