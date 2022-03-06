@@ -35,7 +35,7 @@ class Arena : public Allocator {
     return memory_usage_.load(std::memory_order_relaxed);
   }
 
-  void clear() {}
+  void Clear() {}
   void Sync() {}
   char* GetDataStart() { return nullptr; }
 
