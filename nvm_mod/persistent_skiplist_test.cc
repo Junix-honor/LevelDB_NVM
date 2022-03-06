@@ -58,7 +58,7 @@ TEST(SkipTest, Empty) {
   Comparator cmp;
 
   PersistentSkipList<Key, Comparator> list(cmp, &allocator);
-  list.clear();
+  list.Clear();
 
   std::cout <<"memusage:"<<allocator.MemoryUsage() << std::endl;
   std::cout << "maxheight:"<<list.GetMaxHeight() << std::endl;

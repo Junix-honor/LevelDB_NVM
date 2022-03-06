@@ -201,7 +201,8 @@ target_sources(leveldb
         "nvm_mod/pmem_manager.h"
         "nvm_mod/pmem_manager.cc"
         "nvm_mod/persistent_skiplist.h"
-        # "nvm_mod/persistent_skiplist.cc"
+        "nvm_mod/memtable_nvm.h"
+        "nvm_mod/memtable_nvm.cc"
 
         # Generator expressions
         # https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html?highlight=version_greater
@@ -407,6 +408,7 @@ if (LEVELDB_BUILD_TESTS)
 
         leveldb_test("nvm_mod/pmem_manager_test.cc")
         leveldb_test("nvm_mod/persistent_skiplist_test.cc")
+        leveldb_test("nvm_mod/memtable_nvm_test.cc")
 
         # TODO(costan): This test also uses
         #               "util/env_{posix|windows}_test_helper.h"

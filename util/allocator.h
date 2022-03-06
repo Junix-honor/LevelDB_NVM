@@ -8,7 +8,7 @@ class Allocator {
   virtual char* Allocate(size_t bytes) = 0;
   virtual char* AllocateAligned(size_t bytes) = 0;
   virtual size_t MemoryUsage() const = 0;
-  virtual void clear()=0;
+  virtual void Clear()=0;
   virtual void Sync()=0;
   virtual char* GetDataStart()=0;
 };

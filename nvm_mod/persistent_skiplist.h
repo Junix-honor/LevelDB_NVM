@@ -53,7 +53,7 @@ class PersistentSkipList {
   // Returns true iff an entry that compares equal to key is in the list.
   bool Contains(const Key& key) const;
 
-  void clear();
+  void Clear();
 
   // Iteration over the contents of a skip list
   class Iterator {
@@ -417,8 +417,8 @@ bool PersistentSkipList<Key, Comparator>::Contains(const Key& key) const {
   }
 }
 template <typename Key, class Comparator>
-void PersistentSkipList<Key, Comparator>::clear() {
-  allocator_->clear();
+void PersistentSkipList<Key, Comparator>::Clear() {
+  allocator_->Clear();
   *sequence = 0;
   *pmem_max_height_ = 1;
   max_height_.store(1, std::memory_order_relaxed);

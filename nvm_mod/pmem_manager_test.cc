@@ -21,7 +21,7 @@ TEST(SkipListPmemManagerTest, Sample) {
   {
     std::vector<std::pair<size_t, char*>> allocated;
     PmemManager allocator(&nvm_option, filename);
-    allocator.clear();
+    allocator.Clear();
 
     for (int i = 0; i < N; i++) {
       size_t s;
