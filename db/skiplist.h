@@ -31,12 +31,10 @@
 #include <cassert>
 #include <cstdlib>
 
-#include "util/arena.h"
+#include "util/allocator.h"
 #include "util/random.h"
 
 namespace leveldb {
-
-class Allocator;
 
 template <typename Key, class Comparator>
 class SkipList {

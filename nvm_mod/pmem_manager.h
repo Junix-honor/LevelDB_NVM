@@ -27,7 +27,7 @@ class PmemManager : public Allocator {
 
   // Returns an estimate of the total memory usage of data allocated
   // by the arena.
-  size_t MemoryUsage() const { return *memory_usage_; }
+  size_t MemoryUsage() const { return (size_t)*memory_usage_; }
 
   void clear();
   void Sync();
@@ -35,13 +35,13 @@ class PmemManager : public Allocator {
  public:
   //偏移量
   static const int MEMORY_USAGE_OFFSET = 0;             // MEMORY_USAGE偏移量
-  static const int MEMORY_USAGE_SIZE = sizeof(size_t);  // MEMORY_USAGE大小
+  static const int MEMORY_USAGE_SIZE = 4;  // MEMORY_USAGE大小
 
   static const int DATA_OFFSET =
       MEMORY_USAGE_OFFSET + MEMORY_USAGE_SIZE;  // 数据偏移量
 
-  inline char* GetDataStart() { return pmem_addr + DATA_OFFSET; }
-  inline char* GetMemoryUsage() { return pmem_addr + MEMORY_USAGE_OFFSET; }
+  char* GetDataStart() { return pmem_addr + DATA_OFFSET; }
+  char* GetMemoryUsage() { return pmem_addr + MEMORY_USAGE_OFFSET; }
 
  private:
   void OpenNVMFile();
@@ -51,7 +51,7 @@ class PmemManager : public Allocator {
   size_t alloc_bytes_remaining_;
 
   // Total memory usage of the arena.
-  size_t* memory_usage_;
+  uint32_t* memory_usage_;
 
   std::string pmem_path;
   size_t write_buffer_size;

@@ -9,7 +9,6 @@
 #include "util/random.h"
 
 namespace leveldb {
-class Allocator;
 
 template <typename Key, class Comparator>
 class PersistentSkipList {
@@ -95,13 +94,13 @@ class PersistentSkipList {
     Node* node_;
     // Intentionally copyable
   };
+  inline int32_t GetMaxHeight() const {
+    return max_height_.load(std::memory_order_relaxed);
+  }
 
  private:
   enum { kMaxHeight = 12 };
 
-  inline int GetMaxHeight() const {
-    return max_height_.load(std::memory_order_relaxed);
-  }
 
   Node* NewNode(const Key& key, int height);
   int RandomHeight();
@@ -404,6 +403,7 @@ void PersistentSkipList<Key, Comparator>::Insert(const Key& key, uint64_t s) {
     prev[i]->SetNext(i, x);
     // TODO:flush
   }
+  allocator_->Sync();
 }
 
 template <typename Key, class Comparator>
@@ -427,5 +427,6 @@ void PersistentSkipList<Key, Comparator>::clear() {
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, nullptr);
   }
+  allocator_->Sync();
 }
 }  // namespace leveldb

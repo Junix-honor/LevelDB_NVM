@@ -60,6 +60,8 @@ TEST(SkipTest, Empty) {
   PersistentSkipList<Key, Comparator> list(cmp, &allocator);
   list.clear();
 
+  std::cout <<"memusage:"<<allocator.MemoryUsage() << std::endl;
+  std::cout << "maxheight:"<<list.GetMaxHeight() << std::endl;
   ASSERT_TRUE(!list.Contains((char*)100));
 
   PersistentSkipList<Key, Comparator>::Iterator iter(&list);
@@ -85,7 +87,9 @@ TEST(SkipTest, InsertAndLookup) {
   //创建
   {
     PmemManager allocator(&nvm_option, filename);
+    std::cout <<"memusage:"<<allocator.MemoryUsage() << std::endl;
     PersistentSkipList<Key, Comparator> list(cmp, &allocator);
+    std::cout << "maxheight:"<<list.GetMaxHeight() << std::endl;
     for (int i = 0; i < N; i++) {
       std::string key = strRand(10);
       char* buf = allocator.Allocate(key.size());
