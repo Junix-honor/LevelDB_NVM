@@ -62,13 +62,14 @@ struct DataCmp {
     if (a.key != b.key) return a.key < b.key;
     if (a.seq != b.seq) return a.seq > b.seq;
     if (a.type != b.type) return a.type > b.type;
+    return false;
   }
 };
 
 TEST(MemTableNVMTest, InsertAndLookup) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  nvm_option.pmem_path = "/mnt/hjxPMem";
+  nvm_option.pmem_path = "/mnt/hjxPmem";
   std::string filename = "test.pool";
   const Comparator* cmp1 = BytewiseComparator();
   const InternalKeyComparator cmp2(cmp1);
@@ -90,6 +91,8 @@ TEST(MemTableNVMTest, InsertAndLookup) {
       ValueType type = rnd.OneIn(10) ? kTypeDeletion : kTypeValue;
       memtable.Add(seq, type, key, value);
       data_set.insert(Data(seq, type, key, value));
+      std::cout << "key:" << seq << " " << type << " " << key << " " << value
+                << std::endl;
       Status s;
       std::string get_value;
       LookupKey lookupkey(key, seq);
@@ -107,7 +110,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
       for (auto model_iter = data_set.begin(); model_iter != data_set.end();
            ++model_iter) {
         ASSERT_TRUE(iter->Valid());
-        ASSERT_EQ(*model_iter, iter->key().ToString());
+        ASSERT_EQ(model_iter->value, iter->key().ToString());
         std::cout << iter->key().ToString() << std::endl;
         iter->Next();
       }
