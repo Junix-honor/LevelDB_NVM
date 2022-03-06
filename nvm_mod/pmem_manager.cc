@@ -49,7 +49,7 @@ void PmemManager::Sync() {
   else
     pmem_msync(pmem_addr, mapped_len);
 }
-void PmemManager::clear() {
+void PmemManager::Clear() {
   *memory_usage_ = 0;
   alloc_bytes_remaining_ = write_buffer_size;
   alloc_ptr_ = GetDataStart();

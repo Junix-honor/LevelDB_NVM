@@ -58,7 +58,7 @@ TEST(SkipTest, Empty) {
   Comparator cmp;
 
   PersistentSkipList<Key, Comparator> list(cmp, &allocator);
-  list.clear();
+  list.Clear();
 
   ASSERT_TRUE(!list.Contains((char*)100));
 

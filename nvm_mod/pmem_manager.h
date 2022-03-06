@@ -29,7 +29,7 @@ class PmemManager : public Allocator {
   // by the arena.
   size_t MemoryUsage() const { return *memory_usage_; }
 
-  void clear();
+  void Clear();
   void Sync();
 
  public:
