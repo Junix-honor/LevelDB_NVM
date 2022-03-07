@@ -6,11 +6,12 @@
 #define STORAGE_LEVELDB_DB_WRITE_BATCH_INTERNAL_H_
 
 #include "db/dbformat.h"
+
 #include "leveldb/write_batch.h"
 
 namespace leveldb {
 
-class MemTable;
+class MemTableRep;
 
 // WriteBatchInternal provides static methods for manipulating a
 // WriteBatch that we don't want in the public WriteBatch interface.
@@ -35,7 +36,7 @@ class WriteBatchInternal {
 
   static void SetContents(WriteBatch* batch, const Slice& contents);
 
-  static Status InsertInto(const WriteBatch* batch, MemTable* memtable);
+  static Status InsertInto(const WriteBatch* batch, MemTableRep* memtable);
 
   static void Append(WriteBatch* dst, const WriteBatch* src);
 };

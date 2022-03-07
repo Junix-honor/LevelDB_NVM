@@ -1,6 +1,7 @@
 #pragma once
 
 #include "db/dbformat.h"
+#include "db/memtablerep.h"
 #include <string>
 
 #include "leveldb/db.h"
@@ -11,7 +12,7 @@
 #include "nvm_mod/persistent_skiplist.h"
 namespace leveldb {
 class InternalKeyComparator;
-class MemTableNVM {
+class MemTableNVM : public MemTableRep {
  public:
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
@@ -22,10 +23,10 @@ class MemTableNVM {
   MemTableNVM& operator=(const MemTableNVM&) = delete;
 
   // Increase reference count.
-  void Ref() { ++refs_; }
+  void Ref() override { ++refs_; }
 
   // Drop reference count.  Delete if no more references exist.
-  void Unref() {
+  void Unref() override {
     --refs_;
     assert(refs_ >= 0);
     if (refs_ <= 0) {
@@ -35,7 +36,7 @@ class MemTableNVM {
 
   // Returns an estimate of the number of bytes of data in use by this
   // data structure. It is safe to call when MemTableNVM is being modified.
-  size_t ApproximateMemoryUsage();
+  size_t ApproximateMemoryUsage() override;
 
   // Return an iterator that yields the contents of the memtable.
   //
@@ -43,25 +44,25 @@ class MemTableNVM {
   // while the returned iterator is live.  The keys returned by this
   // iterator are internal keys encoded by AppendInternalKey in the
   // db/format.{h,cc} module.
-  Iterator* NewIterator();
+  Iterator* NewIterator() override;
 
   // Add an entry into memtable that maps key to value at the
   // specified sequence number and with the specified type.
   // Typically value will be empty if type==kTypeDeletion.
   void Add(SequenceNumber seq, ValueType type, const Slice& key,
-           const Slice& value);
+           const Slice& value) override;
 
-  // If memtable contains a value for key, store it in *value and return true.
+  // If memtable contains a value for key, stre it in *value and return true.
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  bool Get(const LookupKey& key, std::string* value, Status* s);
+  bool Get(const LookupKey& key, std::string* value, Status* s) override;
+
+  void Clear() override;
+
+  ~MemTableNVM() override;
 
   class MemTableIterator;
-
-  ~MemTableNVM();
-
-  void Clear();
 
  private:
   struct KeyComparator {

@@ -5,19 +5,20 @@
 #ifndef STORAGE_LEVELDB_DB_MEMTABLE_H_
 #define STORAGE_LEVELDB_DB_MEMTABLE_H_
 
+#include "db/dbformat.h"
+#include "db/memtablerep.h"
+#include "db/skiplist.h"
 #include <string>
 
-#include "db/dbformat.h"
-#include "db/skiplist.h"
 #include "leveldb/db.h"
+
 #include "util/arena.h"
 
 namespace leveldb {
 
 class InternalKeyComparator;
-class MemTableIterator;
 
-class MemTable {
+class MemTable : public MemTableRep {
  public:
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
@@ -62,6 +63,12 @@ class MemTable {
   // Else, return false.
   bool Get(const LookupKey& key, std::string* value, Status* s);
 
+  void Clear() {}
+
+  ~MemTable();  // Private since only Unref() should be used to delete it
+
+  class MemTableIterator;
+
  private:
   friend class MemTableIterator;
   friend class MemTableBackwardIterator;
@@ -73,8 +80,6 @@ class MemTable {
   };
 
   typedef SkipList<const char*, KeyComparator> Table;
-
-  ~MemTable();  // Private since only Unref() should be used to delete it
 
   KeyComparator comparator_;
   int refs_;

@@ -143,6 +143,7 @@ target_sources(leveldb
         "db/log_reader.h"
         "db/log_writer.cc"
         "db/log_writer.h"
+        "db/memtablerep.h"
         "db/memtable.cc"
         "db/memtable.h"
         "db/repair.cc"

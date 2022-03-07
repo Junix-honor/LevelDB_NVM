@@ -4,14 +4,6 @@
 
 #include "db/db_impl.h"
 
-#include <algorithm>
-#include <atomic>
-#include <cstdint>
-#include <cstdio>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "db/builder.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
@@ -22,11 +14,20 @@
 #include "db/table_cache.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
 #include "leveldb/table.h"
 #include "leveldb/table_builder.h"
+
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -338,7 +339,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     }
   }
 
-  // 4.执行recover 
+  // 4.执行recover
   s = versions_->Recover(save_manifest);
   if (!s.ok()) {
     return s;
@@ -346,7 +347,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   SequenceNumber max_sequence(0);
 
   // 5.从那些未注册的log中还原数据（即系统crash后，从log文件中恢复数据）
-  
+
   // Recover from all newer log files than the ones named in the
   // descriptor (new log files may have been added by the previous
   // incarnation without registering them in the descriptor).
@@ -361,7 +362,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
 
   // 获取所有数据库文件名
   std::vector<std::string> filenames;
-  s = env_->GetChildren(dbname_, &filenames); 
+  s = env_->GetChildren(dbname_, &filenames);
   if (!s.ok()) {
     return s;
   }
@@ -458,7 +459,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   Slice record;
   WriteBatch batch;
   int compactions = 0;
-  MemTable* mem = nullptr;
+  MemTableRep* mem = nullptr;
   while (reader.ReadRecord(&record, &scratch) && status.ok()) {
     if (record.size() < 12) {
       reporter.Corruption(record.size(),
@@ -533,7 +534,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
+Status DBImpl::WriteLevel0Table(MemTableRep* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
@@ -589,7 +590,7 @@ void DBImpl::CompactMemTable() {
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
-   // 将数据写入到第0层（实际上不一定是第0层)
+  // 将数据写入到第0层（实际上不一定是第0层)
   Status s = WriteLevel0Table(imm_, &edit, base);
   base->Unref();
 
@@ -738,8 +739,8 @@ void DBImpl::BackgroundCall() {
 }
 
 //触发 compaction 的时机：
-//a. size compaction : 文件过多或文件过大
-//b. seek compaction: seek 次数过多。
+// a. size compaction : 文件过多或文件过大
+// b. seek compaction: seek 次数过多。
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
@@ -1023,7 +1024,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
                  compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
-        // 前一个key还在snaphost内，本key虽然是离snapshot最近的key，但是本key是删除节点	
+        // 前一个key还在snaphost内，本key虽然是离snapshot最近的key，但是本key是删除节点
         // 在是删除节点的同时，还必须保证本key一定是"最底层"的key（也就是更底层没有该key），
         //否则删除这个key，更底层的key将被重新激活
 
@@ -1120,10 +1121,11 @@ namespace {
 struct IterState {
   port::Mutex* const mu;
   Version* const version GUARDED_BY(mu);
-  MemTable* const mem GUARDED_BY(mu);
-  MemTable* const imm GUARDED_BY(mu);
+  MemTableRep* const mem GUARDED_BY(mu);
+  MemTableRep* const imm GUARDED_BY(mu);
 
-  IterState(port::Mutex* mutex, MemTable* mem, MemTable* imm, Version* version)
+  IterState(port::Mutex* mutex, MemTableRep* mem, MemTableRep* imm,
+            Version* version)
       : mu(mutex), version(version), mem(mem), imm(imm) {}
 };
 
@@ -1192,15 +1194,15 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     // 否则从当前最新版本读
     snapshot = versions_->LastSequence();
   }
-  
+
   // 增加引用计数
-  MemTable* mem = mem_;
-  MemTable* imm = imm_;
+  MemTableRep* mem = mem_;
+  MemTableRep* imm = imm_;
   Version* current = versions_->current();
   mem->Ref();
   if (imm != nullptr) imm->Ref();
   current->Ref();
-  
+
   bool have_stat_update = false;
   Version::GetStats stats;
 
@@ -1211,9 +1213,9 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     LookupKey lkey(key, snapshot);
     if (mem->Get(lkey, value, &s)) {  //先向memtable中查询
       // Done
-    } else if (imm != nullptr && imm->Get(lkey, value, &s)) { //再向imm查询
+    } else if (imm != nullptr && imm->Get(lkey, value, &s)) {  //再向imm查询
       // Done
-    } else { //最后到外存的sstables中查询
+    } else {  //最后到外存的sstables中查询
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
@@ -1288,11 +1290,11 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   // 首先要制作出空余空间来写入
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(updates == nullptr);
-  
+
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
-    
+
     //创建WriteBatch
     WriteBatch* write_batch = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
@@ -1403,7 +1405,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
       WriteBatchInternal::Append(result, w->batch);
     }
 
-     // 设置last_writer指针
+    // 设置last_writer指针
     *last_writer = w;
   }
   return result;
@@ -1582,7 +1584,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
-  
+
   //恢复阶段
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;

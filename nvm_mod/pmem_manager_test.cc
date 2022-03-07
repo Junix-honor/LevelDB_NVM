@@ -1,17 +1,19 @@
+#include "nvm_mod/pmem_manager.h"
+
 #include <iostream>
 
 #include "util/random.h"
 
 #include "gtest/gtest.h"
 #include "nvm_mod/nvm_option.h"
-#include "nvm_mod/pmem_manager.h"
 
 namespace leveldb {
 
 TEST(SkipListPmemManagerTest, Sample) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  nvm_option.pmem_path = "/mnt/hjxPMem";
+  //  nvm_option.pmem_path = "/mnt/hjxPMem";
+  nvm_option.pmem_path = "/mnt/d";
   std::string filename = "test.pool";
 
   const int N = 100000;

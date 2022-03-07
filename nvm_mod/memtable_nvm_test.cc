@@ -69,7 +69,8 @@ struct DataCmp {
 TEST(MemTableNVMTest, InsertAndLookup) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  nvm_option.pmem_path = "/mnt/hjxPMem";
+  //  nvm_option.pmem_path = "/mnt/hjxPMem";
+  nvm_option.pmem_path = "/mnt/d";
   std::string filename = "test.pool";
   const Comparator* cmp1 = BytewiseComparator();
   const InternalKeyComparator cmp2(cmp1);
@@ -82,6 +83,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
   {
     PmemManager allocator(&nvm_option, filename);
     MemTableNVM memtable(cmp2, &allocator);
+
     memtable.Clear();
 
     for (int i = 0; i < N; i++) {

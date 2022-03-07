@@ -16,7 +16,7 @@
 #include "leveldb/write_batch.h"
 
 #include "db/dbformat.h"
-#include "db/memtable.h"
+#include "db/memtablerep.h"
 #include "db/write_batch_internal.h"
 #include "leveldb/db.h"
 #include "util/coding.h"
@@ -116,7 +116,7 @@ namespace {
 class MemTableInserter : public WriteBatch::Handler {
  public:
   SequenceNumber sequence_;
-  MemTable* mem_;
+  MemTableRep* mem_;
 
   void Put(const Slice& key, const Slice& value) override {
     mem_->Add(sequence_, kTypeValue, key, value);
@@ -129,7 +129,7 @@ class MemTableInserter : public WriteBatch::Handler {
 };
 }  // namespace
 
-Status WriteBatchInternal::InsertInto(const WriteBatch* b, MemTable* memtable) {
+Status WriteBatchInternal::InsertInto(const WriteBatch* b, MemTableRep* memtable) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;
