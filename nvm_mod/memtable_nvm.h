@@ -70,7 +70,7 @@ class MemTableNVM {
     int operator()(const char* a, const char* b) const;
   };
 
-  typedef PersistentSkipList<const char*, KeyComparator> Table;
+  typedef PersistentSkipList<KeyComparator> Table;
 
   // Private since only Unref() should be used to delete it
 

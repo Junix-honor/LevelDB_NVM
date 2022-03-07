@@ -69,12 +69,12 @@ struct DataCmp {
 TEST(MemTableNVMTest, InsertAndLookup) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  nvm_option.pmem_path = "/mnt/d";
+  nvm_option.pmem_path = "/mnt/hjxPMem";
   std::string filename = "test.pool";
   const Comparator* cmp1 = BytewiseComparator();
   const InternalKeyComparator cmp2(cmp1);
 
-  const int N = 20;
+  const int N = 10;
   std::set<Data, DataCmp> data_set;
   Random rnd(301);
 
@@ -87,7 +87,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
     for (int i = 0; i < N; i++) {
       std::string key = strRand(5);
       std::string value = strRand(10);
-      SequenceNumber seq = rnd.Uniform(1000);
+      SequenceNumber seq = rnd.Uniform(100);
       ValueType type = kTypeValue;
       memtable.Add(seq, type, key, value);
       data_set.insert(Data(seq, type, key, value));
@@ -102,82 +102,86 @@ TEST(MemTableNVMTest, InsertAndLookup) {
     }
 
     // Forward iteration test
-    //    {
-    //      Iterator* iter = memtable.NewIterator();
-    //      iter->SeekToFirst();
-    //
-    //      std::cout << "===Forward iteration test===" << std::endl;
-    //
-    //      // Compare against model iterator
-    //      for (auto model_iter = data_set.begin(); model_iter !=
-    //      data_set.end();
-    //           ++model_iter) {
-    //        ASSERT_TRUE(iter->Valid());
-    //        ASSERT_EQ(model_iter->value, iter->key().ToString());
-    //        std::cout << iter->key().ToString() << std::endl;
-    //        iter->Next();
-    //      }
-    //      ASSERT_TRUE(!iter->Valid());
-    //    }
+    {
+      Iterator* iter = memtable.NewIterator();
+      iter->SeekToFirst();
 
-    // Backward iteration test
-    //    {
-    //      PersistentSkipList<Key, Comparator>::Iterator iter(&list);
-    //      iter.SeekToLast();
-    //
-    //      std::cout << "===Backward iteration test===" << std::endl;
-    //
-    //      // Compare against model iterator
-    //      for (auto model_iter = keys.rbegin(); model_iter != keys.rend();
-    //           ++model_iter) {
-    //        ASSERT_TRUE(iter.Valid());
-    //        ASSERT_EQ(*model_iter, iter.key());
-    //        std::cout << iter.key() << std::endl;
-    //        iter.Prev();
-    //      }
-    //      ASSERT_TRUE(!iter.Valid());
-    //    }
+      std::cout << "===Forward iteration test===" << std::endl;
+
+      // Compare against model iterator
+      for (auto model_iter = data_set.begin(); model_iter != data_set.end();
+           ++model_iter) {
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_EQ(model_iter->value, iter->value().ToString());
+        std::cout << "val:" << iter->value().ToString() << std::endl;
+        iter->Next();
+      }
+      ASSERT_TRUE(!iter->Valid());
+      delete iter;
+    }
+
+    //     Backward iteration test
+    {
+      Iterator* iter = memtable.NewIterator();
+      iter->SeekToLast();
+
+      std::cout << "===Backward iteration test===" << std::endl;
+
+      // Compare against model iterator
+      for (auto model_iter = data_set.rbegin(); model_iter != data_set.rend();
+           ++model_iter) {
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_EQ(model_iter->value, iter->value().ToString());
+        std::cout << "val:" << iter->value().ToString() << std::endl;
+        iter->Prev();
+      }
+      ASSERT_TRUE(!iter->Valid());
+      delete iter;
+    }
   }
   //恢复
-  //  {
-  //    PmemManager allocator(&nvm_option, filename);
-  //    PersistentSkipList<Key, Comparator> list(cmp, &allocator);
-  //    // Forward iteration test
-  //    {
-  //      PersistentSkipList<Key, Comparator>::Iterator iter(&list);
-  //      iter.SeekToFirst();
-  //
-  //      std::cout << "===Forward iteration test===" << std::endl;
-  //
-  //      // Compare against model iterator
-  //      for (auto model_iter = keys.begin(); model_iter != keys.end();
-  //           ++model_iter) {
-  //        ASSERT_TRUE(iter.Valid());
-  //        ASSERT_EQ(*model_iter, iter.key());
-  //        std::cout << iter.key() << std::endl;
-  //        iter.Next();
-  //      }
-  //      ASSERT_TRUE(!iter.Valid());
-  //    }
-  //
-  //    // Backward iteration test
-  //    {
-  //      PersistentSkipList<Key, Comparator>::Iterator iter(&list);
-  //      iter.SeekToLast();
-  //
-  //      std::cout << "===Backward iteration test===" << std::endl;
-  //
-  //      // Compare against model iterator
-  //      for (auto model_iter = keys.rbegin(); model_iter != keys.rend();
-  //           ++model_iter) {
-  //        ASSERT_TRUE(iter.Valid());
-  //        ASSERT_EQ(*model_iter, iter.key());
-  //        std::cout << iter.key() << std::endl;
-  //        iter.Prev();
-  //      }
-  //      ASSERT_TRUE(!iter.Valid());
-  //    }
-  //  }
+  {
+    PmemManager allocator(&nvm_option, filename);
+    MemTableNVM memtable(cmp2, &allocator);
+
+    // Forward iteration test
+    {
+      Iterator* iter = memtable.NewIterator();
+      iter->SeekToFirst();
+
+      std::cout << "===Forward iteration test===" << std::endl;
+
+      // Compare against model iterator
+      for (auto model_iter = data_set.begin(); model_iter != data_set.end();
+           ++model_iter) {
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_EQ(model_iter->value, iter->value().ToString());
+        std::cout << "val:" << iter->value().ToString() << std::endl;
+        iter->Next();
+      }
+      ASSERT_TRUE(!iter->Valid());
+      delete iter;
+    }
+
+    // Backward iteration test
+    {
+      Iterator* iter = memtable.NewIterator();
+      iter->SeekToLast();
+
+      std::cout << "===Backward iteration test===" << std::endl;
+
+      // Compare against model iterator
+      for (auto model_iter = data_set.rbegin(); model_iter != data_set.rend();
+           ++model_iter) {
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_EQ(model_iter->value, iter->value().ToString());
+        std::cout << "val:" << iter->value().ToString() << std::endl;
+        iter->Prev();
+      }
+      ASSERT_TRUE(!iter->Valid());
+      delete iter;
+    }
+  }
 }
 }  // namespace leveldb
 

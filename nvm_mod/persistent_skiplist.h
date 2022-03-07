@@ -10,7 +10,7 @@
 
 namespace leveldb {
 
-template <typename Key, class Comparator>
+template <class Comparator>
 class PersistentSkipList {
  public:
   static const int MAX_HEIGHT_OFFSET = 0;  // MAX_HEIGHT偏移量
@@ -48,10 +48,10 @@ class PersistentSkipList {
 
   // Insert key into the list.
   // REQUIRES: nothing that compares equal to key is currently in the list.
-  void Insert(const Key& key, uint64_t s = 0);
+  void Insert(const char* key, uint64_t s = 0);
 
   // Returns true iff an entry that compares equal to key is in the list.
-  bool Contains(const Key& key) const;
+  bool Contains(const char* key) const;
 
   void Clear();
 
@@ -67,7 +67,7 @@ class PersistentSkipList {
 
     // Returns the key at the current position.
     // REQUIRES: Valid()
-    std::string key() const;
+    const char* key() const;
     const intptr_t& key_offset() const;
 
     // Advances to the next position.
@@ -79,7 +79,7 @@ class PersistentSkipList {
     void Prev();
 
     // Advance to the first entry with a key >= target
-    void Seek(const Key& target);
+    void Seek(const char* target);
 
     // Position at the first entry in list.
     // Final state of iterator is Valid() iff list is not empty.
@@ -101,24 +101,25 @@ class PersistentSkipList {
  private:
   enum { kMaxHeight = 12 };
 
-
-  Node* NewNode(const Key& key, int height);
+  Node* NewNode(const char* key, int height);
   int RandomHeight();
-  bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
+  bool Equal(const char* a, const char* b) const {
+    return (compare_(a, b) == 0);
+  }
 
   // Return true if key is greater than the data stored in "n"
-  bool KeyIsAfterNode(const Key& key, Node* n) const;
+  bool KeyIsAfterNode(const char* key, Node* n) const;
 
   // Return the earliest node that comes at or after key.
   // Return nullptr if there is no such node.
   //
   // If prev is non-null, fills prev[level] with pointer to previous
   // node at "level" for every level in [0..max_height_-1].
-  Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
+  Node* FindGreaterOrEqual(const char* key, Node** prev) const;
 
   // Return the latest node with a key < key.
   // Return head_ if there is no such node.
-  Node* FindLessThan(const Key& key) const;
+  Node* FindLessThan(const char* key) const;
 
   // Return the last node in the list.
   // Return head_ if list is empty.
@@ -141,9 +142,9 @@ class PersistentSkipList {
 };
 
 // Node结构体
-template <typename Key, class Comparator>
-struct PersistentSkipList<Key, Comparator>::Node {
-  explicit Node(const Key& k, const Key& mem)
+template <class Comparator>
+struct PersistentSkipList<Comparator>::Node {
+  explicit Node(const char* k, const char* mem)
       : key_offset(reinterpret_cast<intptr_t>(mem - k)) {}
 
   intptr_t key_offset;
@@ -187,73 +188,70 @@ struct PersistentSkipList<Key, Comparator>::Node {
 };
 
 // NewNode
-template <typename Key, class Comparator>
-typename PersistentSkipList<Key, Comparator>::Node*
-PersistentSkipList<Key, Comparator>::NewNode(const Key& key, int height) {
+template <class Comparator>
+typename PersistentSkipList<Comparator>::Node*
+PersistentSkipList<Comparator>::NewNode(const char* key, int height) {
   char* node_memory = allocator_->AllocateAligned(
       sizeof(Node) + sizeof(std::atomic<intptr_t>) * (height - 1));
   return new (node_memory) Node(key, node_memory);
 }
 
 //迭代器相关函数
-template <typename Key, class Comparator>
-inline PersistentSkipList<Key, Comparator>::Iterator::Iterator(
+template <class Comparator>
+inline PersistentSkipList<Comparator>::Iterator::Iterator(
     const PersistentSkipList* list) {
   list_ = list;
   node_ = nullptr;
 }
 
-template <typename Key, class Comparator>
-inline bool PersistentSkipList<Key, Comparator>::Iterator::Valid() const {
+template <class Comparator>
+inline bool PersistentSkipList<Comparator>::Iterator::Valid() const {
   return node_ != nullptr;
 }
 
-template <typename Key, class Comparator>
-std::string PersistentSkipList<Key, Comparator>::Iterator::key() const {
+template <class Comparator>
+const char* PersistentSkipList<Comparator>::Iterator::key() const {
   assert(Valid());
-  std::string ret =
-      (reinterpret_cast<Key>((intptr_t)node_ - node_->key_offset));
-  return ret;
+  return reinterpret_cast<const char*>((intptr_t)node_ - node_->key_offset);
 }
 
-template <typename Key, class Comparator>
-inline const intptr_t&
-PersistentSkipList<Key, Comparator>::Iterator::key_offset() const {
+template <class Comparator>
+inline const intptr_t& PersistentSkipList<Comparator>::Iterator::key_offset()
+    const {
   assert(Valid());
   return node_->key_offset;
 }
 
-template <typename Key, class Comparator>
-inline void PersistentSkipList<Key, Comparator>::Iterator::Next() {
+template <class Comparator>
+inline void PersistentSkipList<Comparator>::Iterator::Next() {
   assert(Valid());
   node_ = node_->Next(0);
 }
 
-template <typename Key, class Comparator>
-inline void PersistentSkipList<Key, Comparator>::Iterator::Prev() {
+template <class Comparator>
+inline void PersistentSkipList<Comparator>::Iterator::Prev() {
   // Instead of using explicit "prev" links, we just search for the
   // last node that falls before key.
   assert(Valid());
   node_ = list_->FindLessThan(
-      reinterpret_cast<Key>((intptr_t)node_ - node_->key_offset));
+      reinterpret_cast<char*>((intptr_t)node_ - node_->key_offset));
   if (node_ == list_->head_) {
     node_ = nullptr;
   }
 }
 
-template <typename Key, class Comparator>
-inline void PersistentSkipList<Key, Comparator>::Iterator::Seek(
-    const Key& target) {
+template <class Comparator>
+inline void PersistentSkipList<Comparator>::Iterator::Seek(const char* target) {
   node_ = list_->FindGreaterOrEqual(target, nullptr);
 }
 
-template <typename Key, class Comparator>
-inline void PersistentSkipList<Key, Comparator>::Iterator::SeekToFirst() {
+template <class Comparator>
+inline void PersistentSkipList<Comparator>::Iterator::SeekToFirst() {
   node_ = list_->head_->Next(0);
 }
 
-template <typename Key, class Comparator>
-inline void PersistentSkipList<Key, Comparator>::Iterator::SeekToLast() {
+template <class Comparator>
+inline void PersistentSkipList<Comparator>::Iterator::SeekToLast() {
   node_ = list_->FindLast();
   if (node_ == list_->head_) {
     node_ = nullptr;
@@ -261,8 +259,8 @@ inline void PersistentSkipList<Key, Comparator>::Iterator::SeekToLast() {
 }
 
 // RandomHeight
-template <typename Key, class Comparator>
-int PersistentSkipList<Key, Comparator>::RandomHeight() {
+template <class Comparator>
+int PersistentSkipList<Comparator>::RandomHeight() {
   // Increase height with probability 1 in kBranching
   static const unsigned int kBranching = 4;
   int height = 1;
@@ -275,20 +273,20 @@ int PersistentSkipList<Key, Comparator>::RandomHeight() {
 }
 
 // KeyIsAfterNode
-template <typename Key, class Comparator>
-bool PersistentSkipList<Key, Comparator>::KeyIsAfterNode(
-    const Key& key, PersistentSkipList::Node* n) const {
+template <class Comparator>
+bool PersistentSkipList<Comparator>::KeyIsAfterNode(
+    const char* key, PersistentSkipList::Node* n) const {
   // null n is considered infinite
   return (n != nullptr) &&
-         (compare_(reinterpret_cast<Key>((intptr_t)n - n->key_offset), key) <
+         (compare_(reinterpret_cast<char*>((intptr_t)n - n->key_offset), key) <
           0);
 }
 
 // FindGreaterOrEqual
-template <typename Key, class Comparator>
-typename PersistentSkipList<Key, Comparator>::Node*
-PersistentSkipList<Key, Comparator>::FindGreaterOrEqual(
-    const Key& key, PersistentSkipList::Node** prev) const {
+template <class Comparator>
+typename PersistentSkipList<Comparator>::Node*
+PersistentSkipList<Comparator>::FindGreaterOrEqual(
+    const char* key, PersistentSkipList::Node** prev) const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
   while (true) {
@@ -309,18 +307,18 @@ PersistentSkipList<Key, Comparator>::FindGreaterOrEqual(
 }
 
 // FindLessThan
-template <typename Key, class Comparator>
-typename PersistentSkipList<Key, Comparator>::Node*
-PersistentSkipList<Key, Comparator>::FindLessThan(const Key& key) const {
+template <class Comparator>
+typename PersistentSkipList<Comparator>::Node*
+PersistentSkipList<Comparator>::FindLessThan(const char* key) const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
   while (true) {
     assert(x == head_ ||
-           compare_(reinterpret_cast<Key>((intptr_t)x - x->key_offset), key) <
+           compare_(reinterpret_cast<char*>((intptr_t)x - x->key_offset), key) <
                0);
     Node* next = x->Next(level);
     if (next == nullptr ||
-        compare_(reinterpret_cast<Key>((intptr_t)next - next->key_offset),
+        compare_(reinterpret_cast<char*>((intptr_t)next - next->key_offset),
                  key) >= 0) {
       if (level == 0) {
         return x;
@@ -335,9 +333,9 @@ PersistentSkipList<Key, Comparator>::FindLessThan(const Key& key) const {
 }
 
 // FindLast
-template <typename Key, class Comparator>
-typename PersistentSkipList<Key, Comparator>::Node*
-PersistentSkipList<Key, Comparator>::FindLast() const {
+template <class Comparator>
+typename PersistentSkipList<Comparator>::Node*
+PersistentSkipList<Comparator>::FindLast() const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
   while (true) {
@@ -356,9 +354,9 @@ PersistentSkipList<Key, Comparator>::FindLast() const {
 }
 
 // skiplist构造函数
-template <typename Key, class Comparator>
-PersistentSkipList<Key, Comparator>::PersistentSkipList(Comparator cmp,
-                                                        Allocator* allocator)
+template <class Comparator>
+PersistentSkipList<Comparator>::PersistentSkipList(Comparator cmp,
+                                                   Allocator* allocator)
     : compare_(cmp), allocator_(allocator), rnd_(0xdeadbeef) {
   pmem_max_height_ = (int32_t*)GetPmemMaxHeight();
   sequence = (uint64_t*)GetSequence();
@@ -366,8 +364,8 @@ PersistentSkipList<Key, Comparator>::PersistentSkipList(Comparator cmp,
   max_height_.store(*pmem_max_height_, std::memory_order_relaxed);
 }
 
-template <typename Key, class Comparator>
-void PersistentSkipList<Key, Comparator>::Insert(const Key& key, uint64_t s) {
+template <class Comparator>
+void PersistentSkipList<Comparator>::Insert(const char* key, uint64_t s) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];
@@ -375,7 +373,7 @@ void PersistentSkipList<Key, Comparator>::Insert(const Key& key, uint64_t s) {
 
   // Our data structure does not allow duplicate insertion
   assert(x == NULL ||
-         !Equal(key, reinterpret_cast<Key>((intptr_t)x - x->key_offset)));
+         !Equal(key, reinterpret_cast<char*>((intptr_t)x - x->key_offset)));
 
   *sequence = s;
   int height = RandomHeight();
@@ -406,19 +404,24 @@ void PersistentSkipList<Key, Comparator>::Insert(const Key& key, uint64_t s) {
   allocator_->Sync();
 }
 
-template <typename Key, class Comparator>
-bool PersistentSkipList<Key, Comparator>::Contains(const Key& key) const {
+template <class Comparator>
+bool PersistentSkipList<Comparator>::Contains(const char* key) const {
   Node* x = FindGreaterOrEqual(key, nullptr);
   if (x != nullptr &&
-      Equal(key, reinterpret_cast<Key>((intptr_t)x - x->key_offset))) {
+      Equal(key, reinterpret_cast<char*>((intptr_t)x - x->key_offset))) {
     return true;
   } else {
     return false;
   }
 }
-template <typename Key, class Comparator>
-void PersistentSkipList<Key, Comparator>::Clear() {
+template <class Comparator>
+void PersistentSkipList<Comparator>::Clear() {
   allocator_->Clear();
+  pmem_max_height_ =
+      reinterpret_cast<int32_t*>(allocator_->Allocate(sizeof(int32_t)));
+  sequence =
+      reinterpret_cast<uint64_t*>(allocator_->Allocate(sizeof(uint64_t)));
+
   *sequence = 0;
   *pmem_max_height_ = 1;
   max_height_.store(1, std::memory_order_relaxed);

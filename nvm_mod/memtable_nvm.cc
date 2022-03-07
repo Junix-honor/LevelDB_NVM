@@ -64,10 +64,10 @@ class MemTableNVM::MemTableIterator : public Iterator {
   void Next() override { iter_.Next(); }
   void Prev() override { iter_.Prev(); }
   Slice key() const override {
-    return GetLengthPrefixedSlice(iter_.key().c_str());
+    return GetLengthPrefixedSlice(iter_.key());
   }
   Slice value() const override {
-    Slice key_slice = GetLengthPrefixedSlice(iter_.key().c_str());
+    Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
 
@@ -93,18 +93,18 @@ void MemTableNVM::Add(SequenceNumber s, ValueType type, const Slice& key,
   const size_t encoded_len = VarintLength(internal_key_size) +
                              internal_key_size + VarintLength(val_size) +
                              val_size;
-  char* buf = allocator_->Allocate(encoded_len);
+  char* pmem_buf = allocator_->Allocate(encoded_len);
+  char buf[encoded_len];
   char* p = EncodeVarint32(buf, internal_key_size);
-
-  pmem_memcpy_persist(p, key.data(), key_size);
+  std::memcpy(p, key.data(), key_size);
   p += key_size;
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
   p = EncodeVarint32(p, val_size);
-  pmem_memcpy_persist(p, value.data(), val_size);
+  std::memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
-  allocator_->Sync();
-  table_.Insert(buf);
+  pmem_memcpy_persist(pmem_buf, buf, encoded_len);
+  table_.Insert(pmem_buf);
 }
 
 bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
@@ -121,7 +121,7 @@ bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
-    const char* entry = iter.key().c_str();
+    const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
     if (comparator_.comparator.user_comparator()->Compare(
