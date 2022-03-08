@@ -64,6 +64,10 @@ class MemTable : public MemTableRep {
   bool Get(const LookupKey& key, std::string* value, Status* s);
 
   void Clear() {}
+  bool IsPersistent() { return false; }
+
+  // TODO:实现
+  SequenceNumber GetMaxSequenceNumber() { return 0; }
 
   ~MemTable();  // Private since only Unref() should be used to delete it
 

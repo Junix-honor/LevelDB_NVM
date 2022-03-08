@@ -9,6 +9,8 @@
 
 #include "leveldb/export.h"
 
+#include "nvm_mod/nvm_option.h"
+
 namespace leveldb {
 
 class Cache;
@@ -140,6 +142,9 @@ struct LEVELDB_EXPORT Options {
   // Many applications will benefit from passing the result of
   // NewBloomFilterPolicy() here.
   const FilterPolicy* filter_policy = nullptr;
+
+  // nvm option
+  NVMOption nvm_option;
 };
 
 // Options that control read operations

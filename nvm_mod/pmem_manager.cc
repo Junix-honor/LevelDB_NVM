@@ -1,7 +1,7 @@
 #include "pmem_manager.h"
 
 namespace leveldb {
-PmemManager::PmemManager(NVMOption* nvm_option, std::string filename) {
+PmemManager::PmemManager(const NVMOption* nvm_option, std::string filename) {
   write_buffer_size = nvm_option->write_buffer_size;
   pmem_path = nvm_option->pmem_path;
   pmem_file_name = filename;

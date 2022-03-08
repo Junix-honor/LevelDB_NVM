@@ -81,8 +81,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
 
   //创建
   {
-    PmemManager allocator(&nvm_option, filename);
-    MemTableNVM memtable(cmp2, &allocator);
+    MemTableNVM memtable(cmp2, &nvm_option, filename);
 
     memtable.Clear();
 
@@ -143,8 +142,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
   }
   //恢复
   {
-    PmemManager allocator(&nvm_option, filename);
-    MemTableNVM memtable(cmp2, &allocator);
+    MemTableNVM memtable(cmp2, &nvm_option, filename);
 
     // Forward iteration test
     {

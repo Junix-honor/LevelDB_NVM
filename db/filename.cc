@@ -4,11 +4,12 @@
 
 #include "db/filename.h"
 
+#include "db/dbformat.h"
 #include <cassert>
 #include <cstdio>
 
-#include "db/dbformat.h"
 #include "leveldb/env.h"
+
 #include "util/logging.h"
 
 namespace leveldb {
@@ -23,6 +24,10 @@ static std::string MakeFileName(const std::string& dbname, uint64_t number,
   std::snprintf(buf, sizeof(buf), "/%06llu.%s",
                 static_cast<unsigned long long>(number), suffix);
   return dbname + buf;
+}
+std::string MapFileName(const std::string& dbname, uint64_t number) {
+  assert(number > 0);
+  return MakeFileName(dbname, number, "map");
 }
 
 std::string LogFileName(const std::string& dbname, uint64_t number) {
@@ -112,7 +117,9 @@ bool ParseFileName(const std::string& filename, uint64_t* number,
       *type = kTableFile;
     } else if (suffix == Slice(".dbtmp")) {
       *type = kTempFile;
-    } else {
+    } else if (suffix == Slice(".map"))
+      *type = kMapFile;
+    else {
       return false;
     }
     *number = num;

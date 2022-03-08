@@ -5,6 +5,7 @@
 #include "db/version_edit.h"
 
 #include "db/version_set.h"
+
 #include "util/coding.h"
 
 namespace leveldb {
@@ -19,17 +20,20 @@ enum Tag {
   kCompactPointer = 5,
   kDeletedFile = 6,
   kNewFile = 7,
-  // 8 was used for large value refs
+  kMapNumber = 8,
+  // TODO:8 was used for large value refs
   kPrevLogNumber = 9
 };
 
 void VersionEdit::Clear() {
   comparator_.clear();
+  map_number_ = 0;
   log_number_ = 0;
   prev_log_number_ = 0;
   last_sequence_ = 0;
   next_file_number_ = 0;
   has_comparator_ = false;
+  has_map_number_ = false;
   has_log_number_ = false;
   has_prev_log_number_ = false;
   has_next_file_number_ = false;
@@ -42,6 +46,10 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
+  }
+  if (has_map_number_) {
+    PutVarint32(dst, kMapNumber);
+    PutVarint64(dst, map_number_);
   }
   if (has_log_number_) {
     PutVarint32(dst, kLogNumber);
@@ -59,7 +67,6 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, kLastSequence);
     PutVarint64(dst, last_sequence_);
   }
-
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
     PutVarint32(dst, kCompactPointer);
     PutVarint32(dst, compact_pointers_[i].first);  // level
@@ -123,6 +130,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           has_comparator_ = true;
         } else {
           msg = "comparator name";
+        }
+        break;
+
+      case kMapNumber:
+        if (GetVarint64(&input, &map_number_)) {
+          has_map_number_ = true;
+        } else {
+          msg = "map number";
         }
         break;
 
@@ -208,6 +223,10 @@ std::string VersionEdit::DebugString() const {
   if (has_comparator_) {
     r.append("\n  Comparator: ");
     r.append(comparator_);
+  }
+  if (has_map_number_) {
+    r.append("\n  MapNumber: ");
+    AppendNumberTo(&r, map_number_);
   }
   if (has_log_number_) {
     r.append("\n  LogNumber: ");

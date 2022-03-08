@@ -5,11 +5,10 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 #define STORAGE_LEVELDB_DB_VERSION_EDIT_H_
 
+#include "db/dbformat.h"
 #include <set>
 #include <utility>
 #include <vector>
-
-#include "db/dbformat.h"
 
 namespace leveldb {
 
@@ -36,6 +35,10 @@ class VersionEdit {
   void SetComparatorName(const Slice& name) {
     has_comparator_ = true;
     comparator_ = name.ToString();
+  }
+  void SetMapNumber(uint64_t num) {
+    has_map_number_ = true;
+    map_number_ = num;
   }
   void SetLogNumber(uint64_t num) {
     has_log_number_ = true;
@@ -86,11 +89,13 @@ class VersionEdit {
   typedef std::set<std::pair<int, uint64_t>> DeletedFileSet;
 
   std::string comparator_;
+  uint64_t map_number_;
   uint64_t log_number_;
   uint64_t prev_log_number_;
   uint64_t next_file_number_;
   SequenceNumber last_sequence_;
   bool has_comparator_;
+  bool has_map_number_;
   bool has_log_number_;
   bool has_prev_log_number_;
   bool has_next_file_number_;

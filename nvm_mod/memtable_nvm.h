@@ -6,10 +6,9 @@
 
 #include "leveldb/db.h"
 
-#include "util/allocator.h"
-
 #include "libpmem.h"
 #include "nvm_mod/persistent_skiplist.h"
+#include "nvm_mod/pmem_manager.h"
 namespace leveldb {
 class InternalKeyComparator;
 class MemTableNVM : public MemTableRep {
@@ -17,7 +16,7 @@ class MemTableNVM : public MemTableRep {
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
   explicit MemTableNVM(const InternalKeyComparator& comparator,
-                       Allocator* allocator);
+                       const NVMOption* nvm_option, std::string filename);
 
   MemTableNVM(const MemTableNVM&) = delete;
   MemTableNVM& operator=(const MemTableNVM&) = delete;
@@ -59,6 +58,8 @@ class MemTableNVM : public MemTableRep {
   bool Get(const LookupKey& key, std::string* value, Status* s) override;
 
   void Clear() override;
+  bool IsPersistent() override { return true; }
+  SequenceNumber GetMaxSequenceNumber() { return table_.GetSequenceNumber(); }
 
   ~MemTableNVM() override;
 
@@ -77,7 +78,7 @@ class MemTableNVM : public MemTableRep {
 
   KeyComparator comparator_;
   int refs_;
-  Allocator* allocator_;
+  PmemManager allocator_;
   Table table_;
 };
 }  // namespace leveldb

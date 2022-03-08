@@ -12,6 +12,7 @@
 
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
+
 #include "port/port.h"
 
 namespace leveldb {
@@ -25,8 +26,11 @@ enum FileType {
   kDescriptorFile,
   kCurrentFile,
   kTempFile,
-  kInfoLogFile  // Either the current one, or an old one
+  kInfoLogFile,  // Either the current one, or an old one
+  kMapFile
 };
+
+std::string MapFileName(const std::string& dbname, uint64_t number);
 
 // Return the name of the log file with the specified number
 // in the db named by "dbname".  The result will be prefixed with

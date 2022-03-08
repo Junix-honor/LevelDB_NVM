@@ -1,5 +1,6 @@
 #pragma once
 
+#include "db/dbformat.h"
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
@@ -23,7 +24,7 @@ class PersistentSkipList {
   static const int SKIP_LIST_DATA_OFFSET =
       SEQUENCE_OFFSET + SEQUENCE_SIZE;  // 数据偏移量
 
- public:
+ private:
   inline char* GetSkipListDataStart() {
     return allocator_->GetDataStart() + SKIP_LIST_DATA_OFFSET;
   }
@@ -48,12 +49,16 @@ class PersistentSkipList {
 
   // Insert key into the list.
   // REQUIRES: nothing that compares equal to key is currently in the list.
-  void Insert(const char* key, uint64_t s = 0);
+  void Insert(const char* key, SequenceNumber s = 0);
 
   // Returns true iff an entry that compares equal to key is in the list.
   bool Contains(const char* key) const;
 
   void Clear();
+
+  SequenceNumber GetSequenceNumber() {
+    return *(reinterpret_cast<SequenceNumber*>(GetSequence()));
+  }
 
   // Iteration over the contents of a skip list
   class Iterator {
@@ -365,7 +370,7 @@ PersistentSkipList<Comparator>::PersistentSkipList(Comparator cmp,
 }
 
 template <class Comparator>
-void PersistentSkipList<Comparator>::Insert(const char* key, uint64_t s) {
+void PersistentSkipList<Comparator>::Insert(const char* key, SequenceNumber s) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];

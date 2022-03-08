@@ -20,8 +20,13 @@ class MemTableRep {
   virtual bool Get(const LookupKey& key, std::string* value, Status* s) = 0;
 
   virtual void Clear() = 0;
-  
+
+  virtual bool IsPersistent() = 0;
+
+  virtual SequenceNumber GetMaxSequenceNumber() = 0;
+
   virtual ~MemTableRep() {}
+
   //  class MemTableIterator {
   //    virtual ~MemTableIterator() {}
   //
