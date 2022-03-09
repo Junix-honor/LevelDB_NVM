@@ -410,6 +410,7 @@ if (LEVELDB_BUILD_TESTS)
         leveldb_test("nvm_mod/pmem_manager_test.cc")
         leveldb_test("nvm_mod/persistent_skiplist_test.cc")
         leveldb_test("nvm_mod/memtable_nvm_test.cc")
+        leveldb_test("nvm_mod/db_nvm_test.cc")
 
         # TODO(costan): This test also uses
         #               "util/env_{posix|windows}_test_helper.h"

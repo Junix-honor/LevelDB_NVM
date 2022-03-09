@@ -36,6 +36,8 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 
+#include "nvm_mod/memtable_nvm.h"
+
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
@@ -133,6 +135,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       owns_info_log_(options_.info_log != raw_options.info_log),
       owns_cache_(options_.block_cache != raw_options.block_cache),
       dbname_(dbname),
+      dbname_nvm_(raw_options.nvm_option.pmem_path),
       table_cache_(new TableCache(dbname_, options_, TableCacheSize(options_))),
       db_lock_(nullptr),
       shutting_down_(false),
@@ -147,6 +150,8 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       background_compaction_scheduled_(false),
       manual_compaction_(nullptr),
+      use_nvm_mem_module(raw_options.nvm_option.use_nvm_mem_module),
+      current_write_buffer_size(options_.write_buffer_size),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {}
 
@@ -244,6 +249,12 @@ void DBImpl::RemoveObsoleteFiles() {
 
   std::vector<std::string> filenames;
   env_->GetChildren(dbname_, &filenames);  // Ignoring errors on purpose
+
+  // TODO:use_nvm_mem_module
+  std::vector<std::string> nvm_filenames;
+  env_->GetChildren(dbname_nvm_, &nvm_filenames);
+  filenames.insert(filenames.end(), nvm_filenames.begin(), nvm_filenames.end());
+
   uint64_t number;
   FileType type;
   std::vector<std::string> files_to_delete;
@@ -252,6 +263,7 @@ void DBImpl::RemoveObsoleteFiles() {
       bool keep = true;
       switch (type) {
         case kLogFile:
+        case kMapFile:
           keep = ((number >= versions_->LogNumber()) ||
                   (number == versions_->PrevLogNumber()));
           break;
@@ -291,7 +303,11 @@ void DBImpl::RemoveObsoleteFiles() {
   // are therefore safe to delete while allowing other threads to proceed.
   mutex_.Unlock();
   for (const std::string& filename : files_to_delete) {
-    env_->RemoveFile(dbname_ + "/" + filename);
+    if (std::find(nvm_filenames.begin(), nvm_filenames.end(), filename) !=
+        nvm_filenames.end())
+      env_->RemoveFile(dbname_nvm_ + "/" + filename);
+    else
+      env_->RemoveFile(dbname_ + "/" + filename);
   }
   mutex_.Lock();
 }
@@ -306,6 +322,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   // 这里直接忽略CreateDir失败的情况。因为DB的创建只会在描述符被创建之后
   // 再进行提交，并且这个目录有可能是上次创建DB失败之后留下来的。
   env_->CreateDir(dbname_);
+  if (use_nvm_mem_module) env_->CreateDir(dbname_nvm_);
   assert(db_lock_ == nullptr);
 
   // 2.创建文件锁
@@ -366,6 +383,15 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   if (!s.ok()) {
     return s;
   }
+  if (use_nvm_mem_module) {
+    std::vector<std::string> nvm_filenames;
+    s = env_->GetChildren(dbname_nvm_, &nvm_filenames);
+    if (!s.ok()) {
+      return s;
+    }
+    filenames.insert(filenames.end(), nvm_filenames.begin(),
+                     nvm_filenames.end());
+  }
 
   // 加入所有版本中的sstable文件number（到这里还只有一个版本）
   std::set<uint64_t> expected;
@@ -373,16 +399,29 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
 
   uint64_t number;
   FileType type;
-  // logs保存需要执行恢复的log文件名
-  std::vector<uint64_t> logs;
-  for (size_t i = 0; i < filenames.size(); i++) {
-    if (ParseFileName(filenames[i], &number, &type)) {
+  struct RecoveryFile {
+    RecoveryFile(uint64_t inum, FileType itype) : num(inum), type(itype) {}
+    uint64_t num;
+    FileType type;
+    bool operator<(const RecoveryFile& f) const { return num < f.num; }
+  };
+  // logs保存需要执行恢复的log和maps文件名
+  std::vector<RecoveryFile> recovery_files;
+  uint64_t last_log_num = 0;
+
+  for (auto& filename : filenames) {
+    if (ParseFileName(filename, &number, &type)) {
       expected.erase(number);
-      if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
+      if (type == kLogFile && ((number >= min_log) || (number == prev_log))) {
         // 得到需要执行恢复的log文件
-        logs.push_back(number);
+        recovery_files.push_back(RecoveryFile(number, kLogFile));
+        last_log_num = number;
+      } else if (type == kMapFile &&
+                 ((number >= min_log) || (number == prev_log)))
+        recovery_files.push_back(RecoveryFile(number, kMapFile));
     }
   }
+
   if (!expected.empty()) {
     char buf[50];
     std::snprintf(buf, sizeof(buf), "%d missing files; e.g.",
@@ -391,11 +430,20 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
-  std::sort(logs.begin(), logs.end());
-  for (size_t i = 0; i < logs.size(); i++) {
-    // 正式从log中恢复数据
-    s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
-                       &max_sequence);
+  std::sort(recovery_files.begin(), recovery_files.end());
+  for (size_t i = 0; i < recovery_files.size(); i++) {
+    if (recovery_files[i].type == kMapFile) {
+      //从map中恢复数据
+      s = RecoverMapFile(recovery_files[i].num, save_manifest, edit,
+                         &max_sequence);
+    } else if (recovery_files[i].type == kLogFile) {
+      //从log中恢复数据
+      s = RecoverLogFile(recovery_files[i].num,
+                         recovery_files[i].num == last_log_num, save_manifest,
+                         edit, &max_sequence);
+    } else {
+      s = Status::Corruption("recovery_files ERROR");
+    }
     if (!s.ok()) {
       return s;
     }
@@ -403,7 +451,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     // The previous incarnation may not have written any MANIFEST
     // records after allocating this log number.  So we manually
     // update the file number allocation counter in VersionSet.
-    versions_->MarkFileNumberUsed(logs[i]);
+    versions_->MarkFileNumberUsed(recovery_files[i].num);
   }
 
   if (versions_->LastSequence() < max_sequence) {
@@ -513,10 +561,12 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       logfile_number_ = log_number;
       if (mem != nullptr) {
         mem_ = mem;
+        current_write_buffer_size = options_.write_buffer_size;
         mem = nullptr;
       } else {
         // mem can be nullptr if lognum exists but was empty.
         mem_ = new MemTable(internal_comparator_);
+        current_write_buffer_size = options_.write_buffer_size;
         mem_->Ref();
       }
     }
@@ -533,7 +583,26 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
 
   return status;
 }
-
+Status DBImpl::RecoverMapFile(uint64_t map_number, bool* save_manifest,
+                              VersionEdit* edit, SequenceNumber* max_sequence) {
+  mutex_.AssertHeld();
+  if (mem_ != nullptr) {
+    *save_manifest = true;
+    Status s = WriteLevel0Table(mem_, edit, nullptr);
+    if (!s.ok()) return s;
+    mem_->Unref();
+    mem_ = nullptr;
+  }
+  logfile_number_ = map_number;
+  std::string fname = MapFileName(dbname_nvm_, map_number);
+  MemTableRep* mem =
+      new MemTableNVM(internal_comparator_, &options_.nvm_option, fname);
+  mem->Ref();
+  *max_sequence = mem->GetMaxSequenceNumber();
+  mem_ = mem;
+  current_write_buffer_size = options_.nvm_option.write_buffer_size;
+  return Status::OK();
+}
 Status DBImpl::WriteLevel0Table(MemTableRep* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
@@ -1308,12 +1377,14 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       mutex_.Unlock();
 
       //添加log
-      status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
       bool sync_error = false;
-      if (status.ok() && options.sync) {
-        status = logfile_->Sync();
-        if (!status.ok()) {
-          sync_error = true;
+      if (!mem_->IsPersistent()) {
+        status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
+        if (status.ok() && options.sync) {
+          status = logfile_->Sync();
+          if (!status.ok()) {
+            sync_error = true;
+          }
         }
       }
 
@@ -1439,7 +1510,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+               (mem_->ApproximateMemoryUsage() <= current_write_buffer_size)) {
       //有足够的空间
       // There is room in current memtable
       break;
@@ -1455,26 +1526,44 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       background_work_finished_signal_.Wait();
     } else {
-      // 强制将mem_转为imm_, 强制生成新的log_
+      // 将mem_转为imm_, 生成新的log_
       // Attempt to switch to a new memtable and trigger compaction of old
-      assert(versions_->PrevLogNumber() == 0);
-      uint64_t new_log_number = versions_->NewFileNumber();
-      WritableFile* lfile = nullptr;
-      s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
-      if (!s.ok()) {
-        // Avoid chewing through file number space in a tight loop.
-        versions_->ReuseFileNumber(new_log_number);
-        break;
+
+      if (use_nvm_mem_module && !mem_->IsPersistent()) {
+        imm_ = mem_;
+        has_imm_.store(true, std::memory_order_release);
+
+        uint64_t new_map_number = versions_->NewFileNumber();
+        std::string filename = MapFileName(dbname_nvm_, new_map_number);
+
+        mem_ = new MemTableNVM(internal_comparator_, &options_.nvm_option,
+                               filename);
+        logfile_number_ = new_map_number;
+        current_write_buffer_size = options_.nvm_option.write_buffer_size;
+        mem_->Clear();
+        mem_->Ref();
+      } else {
+        assert(versions_->PrevLogNumber() == 0);
+        uint64_t new_log_number = versions_->NewFileNumber();
+        WritableFile* lfile = nullptr;
+        s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
+        if (!s.ok()) {
+          // Avoid chewing through file number space in a tight loop.
+          versions_->ReuseFileNumber(new_log_number);
+          break;
+        }
+        delete log_;
+        delete logfile_;
+        logfile_ = lfile;
+        logfile_number_ = new_log_number;
+        log_ = new log::Writer(lfile);
+        imm_ = mem_;
+        has_imm_.store(true, std::memory_order_release);
+        mem_ = new MemTable(internal_comparator_);
+        current_write_buffer_size = options_.write_buffer_size;
+        mem_->Ref();
       }
-      delete log_;
-      delete logfile_;
-      logfile_ = lfile;
-      logfile_number_ = new_log_number;
-      log_ = new log::Writer(lfile);
-      imm_ = mem_;
-      has_imm_.store(true, std::memory_order_release);
-      mem_ = new MemTable(internal_comparator_);
-      mem_->Ref();
+
       force = false;  // Do not force another compaction if have room
       MaybeScheduleCompaction();
     }
@@ -1603,6 +1692,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
       impl->logfile_number_ = new_log_number;
       impl->log_ = new log::Writer(lfile);
       impl->mem_ = new MemTable(impl->internal_comparator_);
+      impl->current_write_buffer_size = options.write_buffer_size;
       impl->mem_->Ref();
     }
   }
@@ -1635,22 +1725,33 @@ Snapshot::~Snapshot() = default;
 Status DestroyDB(const std::string& dbname, const Options& options) {
   Env* env = options.env;
   std::vector<std::string> filenames;
-  Status result = env->GetChildren(dbname, &filenames);
-  if (!result.ok()) {
-    // Ignore error in case directory does not exist
-    return Status::OK();
-  }
+  env->GetChildren(dbname, &filenames);
+
+  std::vector<std::string> nvm_filenames;
+  env->GetChildren(options.nvm_option.pmem_path, &nvm_filenames);
 
   FileLock* lock;
   const std::string lockname = LockFileName(dbname);
-  result = env->LockFile(lockname, &lock);
+  Status result = env->LockFile(lockname, &lock);
   if (result.ok()) {
     uint64_t number;
     FileType type;
-    for (size_t i = 0; i < filenames.size(); i++) {
-      if (ParseFileName(filenames[i], &number, &type) &&
+    // SSD
+    for (auto& filename : filenames) {
+      if (ParseFileName(filename, &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
-        Status del = env->RemoveFile(dbname + "/" + filenames[i]);
+        Status del = env->RemoveFile(dbname + "/" + filename);
+        if (result.ok() && !del.ok()) {
+          result = del;
+        }
+      }
+    }
+    // NVM
+    for (auto& filename : nvm_filenames) {
+      if (ParseFileName(filename, &number, &type) &&
+          type != kDBLockFile) {  // Lock file will be deleted at end
+        Status del =
+            env->RemoveFile(options.nvm_option.pmem_path + "/" + filename);
         if (result.ok() && !del.ok()) {
           result = del;
         }
@@ -1659,6 +1760,7 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     env->UnlockFile(lock);  // Ignore error since state is already gone
     env->RemoveFile(lockname);
     env->RemoveDir(dbname);  // Ignore error in case dir contains other files
+    env->RemoveDir(options.nvm_option.pmem_path);
   }
   return result;
 }

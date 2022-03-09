@@ -71,7 +71,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
   //  nvm_option.pmem_path = "/mnt/hjxPMem";
   nvm_option.pmem_path = "/mnt/d";
-  std::string filename = "test.pool";
+  std::string filename = "/mnt/d/test.pool";
   const Comparator* cmp1 = BytewiseComparator();
   const InternalKeyComparator cmp2(cmp1);
 
@@ -81,12 +81,27 @@ TEST(MemTableNVMTest, InsertAndLookup) {
 
   //创建
   {
-    PmemManager allocator(&nvm_option, filename);
-    MemTableNVM memtable(cmp2, &allocator);
+    MemTableNVM memtable(cmp2, &nvm_option, filename);
 
     memtable.Clear();
+    {
+      std::string key = "";
+      std::string value = strRand(2);
+      SequenceNumber seq = rnd.Uniform(100);
+      ValueType type = kTypeValue;
+      memtable.Add(seq, type, key, value);
+      data_set.insert(Data(seq, type, key, value));
 
-    for (int i = 0; i < N; i++) {
+      std::cout << "seq:" << seq << " type:" << type << " key:" << key
+                << " value:" << value << std::endl;
+      Status s;
+      std::string get_value;
+      LookupKey lookupkey(key, seq);
+      ASSERT_TRUE(memtable.Get(lookupkey, &get_value, &s));
+      std::cout << "look up key:" << key << " value:" << get_value << std::endl;
+      ASSERT_EQ(value, get_value);
+    }
+    for (int i = 0; i < N - 1; i++) {
       std::string key = strRand(5);
       std::string value = strRand(10);
       SequenceNumber seq = rnd.Uniform(100);
@@ -143,8 +158,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
   }
   //恢复
   {
-    PmemManager allocator(&nvm_option, filename);
-    MemTableNVM memtable(cmp2, &allocator);
+    MemTableNVM memtable(cmp2, &nvm_option, filename);
 
     // Forward iteration test
     {

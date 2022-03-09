@@ -18,16 +18,16 @@ static Slice GetLengthPrefixedSlice(const char* data) {
 }
 
 MemTableNVM::MemTableNVM(const InternalKeyComparator& comparator,
-                         Allocator* allocator)
+                         const NVMOption* nvm_option, std::string filename)
     : comparator_(comparator),
       refs_(0),
-      allocator_(allocator),
-      table_(comparator_, allocator_) {}
+      allocator_(nvm_option, filename),
+      table_(comparator_, &allocator_) {}
 
 MemTableNVM::~MemTableNVM() { assert(refs_ == 0); }
 
 size_t MemTableNVM::ApproximateMemoryUsage() {
-  return allocator_->MemoryUsage();
+  return allocator_.MemoryUsage();
 }
 
 int MemTableNVM::KeyComparator::operator()(const char* aptr,
@@ -63,9 +63,7 @@ class MemTableNVM::MemTableIterator : public Iterator {
   void SeekToLast() override { iter_.SeekToLast(); }
   void Next() override { iter_.Next(); }
   void Prev() override { iter_.Prev(); }
-  Slice key() const override {
-    return GetLengthPrefixedSlice(iter_.key());
-  }
+  Slice key() const override { return GetLengthPrefixedSlice(iter_.key()); }
   Slice value() const override {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
@@ -93,7 +91,7 @@ void MemTableNVM::Add(SequenceNumber s, ValueType type, const Slice& key,
   const size_t encoded_len = VarintLength(internal_key_size) +
                              internal_key_size + VarintLength(val_size) +
                              val_size;
-  char* pmem_buf = allocator_->Allocate(encoded_len);
+  char* pmem_buf = allocator_.Allocate(encoded_len);
   char buf[encoded_len];
   char* p = EncodeVarint32(buf, internal_key_size);
   std::memcpy(p, key.data(), key_size);
@@ -104,7 +102,7 @@ void MemTableNVM::Add(SequenceNumber s, ValueType type, const Slice& key,
   std::memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
   pmem_memcpy_persist(pmem_buf, buf, encoded_len);
-  table_.Insert(pmem_buf);
+  table_.Insert(pmem_buf, s);
 }
 
 bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
@@ -143,7 +141,7 @@ bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
   return false;
 }
 void MemTableNVM::Clear() {
-  allocator_->Clear();
+  allocator_.Clear();
   table_.Clear();
   refs_ = 0;
 }

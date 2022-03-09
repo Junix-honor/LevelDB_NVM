@@ -23,6 +23,8 @@ namespace leveldb {
 
 class MemTableRep;
 class MemTable;
+class MemTableNVM;
+class PmemManager;
 class TableCache;
 class Version;
 class VersionEdit;
@@ -129,6 +131,10 @@ class DBImpl : public DB {
                         VersionEdit* edit, SequenceNumber* max_sequence)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  Status RecoverMapFile(uint64_t map_number, bool* save_manifest,
+                        VersionEdit* edit, SequenceNumber* max_sequence)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
   Status WriteLevel0Table(MemTableRep* mem, VersionEdit* edit, Version* base)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -165,6 +171,11 @@ class DBImpl : public DB {
   const bool owns_info_log_;
   const bool owns_cache_;
   const std::string dbname_;
+
+  // nvm
+  const std::string dbname_nvm_;
+  bool use_nvm_mem_module;
+  size_t current_write_buffer_size;
 
   // table_cache_ provides its own synchronization
   TableCache* const table_cache_;

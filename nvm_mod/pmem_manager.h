@@ -12,7 +12,7 @@
 namespace leveldb {
 class PmemManager : public Allocator {
  public:
-  PmemManager(NVMOption* nvm_option, std::string filename);
+  PmemManager(const NVMOption* nvm_option, std::string filename);
 
   PmemManager(const PmemManager&) = delete;
   PmemManager& operator=(const PmemManager&) = delete;
