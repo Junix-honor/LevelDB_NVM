@@ -223,6 +223,9 @@ class VersionSet {
   // Return the current log file number.
   uint64_t LogNumber() const { return log_number_; }
 
+  //Return the current map file number.
+  uint64_t MapNumber() const { return map_number_; }
+
   // Return the log file number for the log file that is currently
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
@@ -302,6 +305,7 @@ class VersionSet {
   uint64_t next_file_number_;
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
+  uint64_t map_number_;
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 

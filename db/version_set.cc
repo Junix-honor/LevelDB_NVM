@@ -4,16 +4,17 @@
 
 #include "db/version_set.h"
 
-#include <algorithm>
-#include <cstdio>
-
 #include "db/filename.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/table_cache.h"
+#include <algorithm>
+#include <cstdio>
+
 #include "leveldb/env.h"
 #include "leveldb/table_builder.h"
+
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
@@ -290,7 +291,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     FileMetaData* f = files_[0][i];
     if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
         ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
-          // 找到level0的sstable，这些sstable的range 都包含了user_key.
+      // 找到level0的sstable，这些sstable的range 都包含了user_key.
       tmp.push_back(f);
     }
   }
@@ -356,7 +357,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       state->last_file_read = f;
       state->last_file_read_level = level;
 
-       // 从cache中获取
+      // 从cache中获取
       state->s = state->vset->table_cache_->Get(*state->options, f->number,
                                                 f->file_size, state->ikey,
                                                 &state->saver, SaveValue);
@@ -678,8 +679,8 @@ class VersionSet::Builder {
 
       //根据估算，大概每 25 次 seek 的 time cost = 1 次 compaction 的
       //保守估计，1 次 seek 相当于 compaction16kb 的数据
-      //所以当 seek 的总耗时约等于一次 compaction 的耗时时，就触发一次 compaction
-      //允许 seek 的次数为
+      //所以当 seek 的总耗时约等于一次 compaction 的耗时时，就触发一次
+      // compaction 允许 seek 的次数为
       f->allowed_seeks = static_cast<int>((f->file_size / 16384U));
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
@@ -767,6 +768,7 @@ VersionSet::VersionSet(const std::string& dbname, const Options* options,
       next_file_number_(2),
       manifest_file_number_(0),  // Filled by Recover()
       last_sequence_(0),
+      map_number_(0),
       log_number_(0),
       prev_log_number_(0),
       descriptor_file_(nullptr),
@@ -801,13 +803,18 @@ void VersionSet::AppendVersion(Version* v) {
 }
 
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
+  if (edit->has_map_number_) {
+    assert(edit->map_number_ >= map_number_);
+    assert(edit->map_number_ < next_file_number_);
+  } else {
+    edit->SetMapNumber(map_number_);
+  }
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
     assert(edit->log_number_ < next_file_number_);
   } else {
     edit->SetLogNumber(log_number_);
   }
-
   if (!edit->has_prev_log_number_) {
     edit->SetPrevLogNumber(prev_log_number_);
   }
@@ -831,7 +838,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   // a temporary file that contains a snapshot of the current version.
   std::string new_manifest_file;
   Status s;
-  if (descriptor_log_ == nullptr) {  
+  if (descriptor_log_ == nullptr) {
     // 首次进入，创建manifest writer
     // No reason to unlock *mu here since we only hit this path in the
     // first call to LogAndApply (when opening the database).
@@ -880,6 +887,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   // Install the new version
   if (s.ok()) {
     AppendVersion(v);
+    map_number_ = edit->map_number_;
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
   } else {
@@ -929,11 +937,13 @@ Status VersionSet::Recover(bool* save_manifest) {
   }
 
   bool have_log_number = false;
+  bool have_map_number = false;
   bool have_prev_log_number = false;
   bool have_next_file = false;
   bool have_last_sequence = false;
   uint64_t next_file = 0;
   uint64_t last_sequence = 0;
+  uint64_t map_number = 0;
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
 
@@ -966,7 +976,10 @@ Status VersionSet::Recover(bool* save_manifest) {
       if (s.ok()) {
         builder.Apply(&edit);
       }
-
+      if (edit.has_map_number_) {
+        map_number = edit.map_number_;
+        have_map_number = true;
+      }
       if (edit.has_log_number_) {
         log_number = edit.log_number_;
         have_log_number = true;
@@ -1006,6 +1019,7 @@ Status VersionSet::Recover(bool* save_manifest) {
 
     MarkFileNumberUsed(prev_log_number);
     MarkFileNumberUsed(log_number);
+    MarkFileNumberUsed(map_number);
   }
 
   if (s.ok()) {
@@ -1017,6 +1031,7 @@ Status VersionSet::Recover(bool* save_manifest) {
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
     last_sequence_ = last_sequence;
+    map_number_ = map_number;
     log_number_ = log_number;
     prev_log_number_ = prev_log_number;
 
@@ -1026,7 +1041,7 @@ Status VersionSet::Recover(bool* save_manifest) {
       // 这里主要判断MANIFEST的大小，如果大于2M，那么就不会重用MANIFEST文件，
       // 而是将当前状态写入到一个新的MANIFEST文件里，这样可以避免打开的时候读取
       // 太大的MANINFEST，使得打开时间太长
-      
+
       // No need to save new manifest
     } else {
       *save_manifest = true;
@@ -1107,7 +1122,7 @@ void VersionSet::Finalize(Version* v) {
       score =
           static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
     }
-    
+
     // 选择得分最高的来做compaction
     if (score > best_score) {
       best_level = level;
@@ -1278,7 +1293,7 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   // we will make a concatenating iterator per level.
   // TODO(opt): use concatenating iterator for level-0 if there is no overlap
   const int space = (c->level() == 0 ? c->inputs_[0].size() + 1 : 2);
-  //list中的每个iter，都指向了一个即将被compaction的sstable
+  // list中的每个iter，都指向了一个即将被compaction的sstable
   Iterator** list = new Iterator*[space];
   int num = 0;
   for (int which = 0; which < 2; which++) {
@@ -1316,7 +1331,7 @@ Compaction* VersionSet::PickCompaction() {
   // the compactions triggered by seeks.
   const bool size_compaction = (current_->compaction_score_ >= 1);
   const bool seek_compaction = (current_->file_to_compact_ != nullptr);
-  
+
   //考虑size_compaction
   if (size_compaction) {
     level = current_->compaction_level_;
@@ -1357,8 +1372,9 @@ Compaction* VersionSet::PickCompaction() {
     InternalKey smallest, largest;
     GetRange(c->inputs_[0], &smallest, &largest);
 
-    //在 GetOverlappingInputs 函数中，会 discard 我们之前加入的 sstable filemeta, 
-    //但是后会 replace 一个 overlap set，这个 overlap set 将会包含之前 picked file。
+    //在 GetOverlappingInputs 函数中，会 discard 我们之前加入的 sstable
+    // filemeta, 但是后会 replace 一个 overlap set，这个 overlap set
+    // 将会包含之前 picked file。
 
     // Note that the next call will discard the file we placed in
     // c->inputs_[0] earlier and replace it with an overlapping set
@@ -1464,7 +1480,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   AddBoundaryInputs(icmp_, current_->files_[level], &c->inputs_[0]);
   // 获取当前level n的range
   GetRange(c->inputs_[0], &smallest, &largest);
-  
+
   // 获取level n+1中与 level n的range重叠的sstable，
   // 将这些sstable存放在c->inputs_[1]中
   current_->GetOverlappingInputs(level + 1, &smallest, &largest,
@@ -1480,7 +1496,6 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
   if (!c->inputs_[1].empty()) {
-    
     //计算如果要在 level n 要重新加入 sstable，那加入后的第 level n 层的
     // compaction sstable 的总大小为多少（即 expanded0_size)
     std::vector<FileMetaData*> expanded0;
@@ -1497,8 +1512,9 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
             ExpandedCompactionByteSizeLimit(options_)) {
       InternalKey new_start, new_limit;
       GetRange(expanded0, &new_start, &new_limit);
-      
-      //加入后的第 level n+1层的 compaction sstable 的总大小为多少（即 expanded1_size)
+
+      //加入后的第 level n+1层的 compaction sstable 的总大小为多少（即
+      // expanded1_size)
       std::vector<FileMetaData*> expanded1;
       current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
                                      &expanded1);
