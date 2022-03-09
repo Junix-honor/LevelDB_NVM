@@ -150,7 +150,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       background_compaction_scheduled_(false),
       manual_compaction_(nullptr),
-      mapfile_number_(0),
+      mapfile_number_(2),
       use_nvm_mem_module(raw_options.nvm_option.use_nvm_mem_module),
       current_write_buffer_size(options_.write_buffer_size),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
@@ -418,13 +418,16 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   };
   // logs保存需要执行恢复的log和maps文件名
   std::vector<RecoveryFile> recovery_files;
+  uint64_t last_log_num = 0;
+
   for (auto& filename : filenames) {
     if (ParseFileName(filename, &number, &type)) {
       expected.erase(number);
-      if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
+      if (type == kLogFile && ((number >= min_log) || (number == prev_log))) {
         // 得到需要执行恢复的log文件
         recovery_files.push_back(RecoveryFile(number, kLogFile));
-      else if (type == kMapFile && number >= min_map)
+        last_log_num = number;
+      } else if (type == kMapFile && number >= min_map)
         recovery_files.push_back(RecoveryFile(number, kMapFile));
     }
   }
@@ -445,8 +448,8 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     } else if (recovery_files[i].type == kLogFile) {
       //从log中恢复数据
       s = RecoverLogFile(recovery_files[i].num,
-                         (i == recovery_files.size() - 1), save_manifest, edit,
-                         &max_sequence);
+                         recovery_files[i].num == last_log_num, save_manifest,
+                         edit, &max_sequence);
     } else {
       s = Status::Corruption("recovery_files ERROR");
     }
@@ -604,7 +607,7 @@ Status DBImpl::RecoverMapFile(uint64_t map_number, bool* save_manifest,
   MemTableRep* mem =
       new MemTableNVM(internal_comparator_, &options_.nvm_option, fname);
   mem->Ref();
-  *max_sequence = mem_->GetMaxSequenceNumber();
+  *max_sequence = mem->GetMaxSequenceNumber();
   mem_ = mem;
   current_write_buffer_size = options_.nvm_option.write_buffer_size;
   return Status::OK();
@@ -1541,10 +1544,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
         has_imm_.store(true, std::memory_order_release);
 
         uint64_t new_map_number = versions_->NewFileNumber();
-        std::string filename = MapFileName(dbname_, new_map_number);
+        std::string filename = MapFileName(dbname_nvm_, new_map_number);
 
         mem_ = new MemTableNVM(internal_comparator_, &options_.nvm_option,
                                filename);
+        mapfile_number_ = logfile_number_ = new_map_number;
         current_write_buffer_size = options_.nvm_option.write_buffer_size;
         mem_->Clear();
         mem_->Ref();
@@ -1561,7 +1565,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
         delete log_;
         delete logfile_;
         logfile_ = lfile;
-        logfile_number_ = new_log_number;
+        logfile_number_ = mapfile_number_ = new_log_number;
         log_ = new log::Writer(lfile);
         imm_ = mem_;
         has_imm_.store(true, std::memory_order_release);
@@ -1738,8 +1742,6 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
 
   std::vector<std::string> nvm_filenames;
   env->GetChildren(options.nvm_option.pmem_path, &nvm_filenames);
-
-  if (filenames.empty() && nvm_filenames.empty()) return Status::OK();
 
   FileLock* lock;
   const std::string lockname = LockFileName(dbname);

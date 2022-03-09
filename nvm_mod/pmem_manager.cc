@@ -14,11 +14,11 @@ PmemManager::~PmemManager() { pmem_unmap(pmem_addr, mapped_len); }
 
 void PmemManager::OpenNVMFile() {
   char buf[100];
-  snprintf(buf, sizeof(buf), "%s/%s", pmem_path.c_str(),
-           pmem_file_name.c_str());
-  std::string pmem_file_path(buf, strlen(buf));
+//  snprintf(buf, sizeof(buf), "%s/%s", pmem_path.c_str(),
+//           pmem_file_name.c_str());
+//  std::string pmem_file_path(buf, strlen(buf));
   pmem_addr = (char*)(pmem_map_file(
-      pmem_file_path.c_str(), write_buffer_size + DATA_OFFSET, PMEM_FILE_CREATE,
+      pmem_file_name.c_str(), write_buffer_size + DATA_OFFSET, PMEM_FILE_CREATE,
       0666, &mapped_len, &is_pmem));
   assert(pmem_addr != nullptr);
 }

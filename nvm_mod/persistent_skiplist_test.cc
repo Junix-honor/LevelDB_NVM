@@ -21,7 +21,7 @@
 
 namespace leveldb {
 
-struct Comparator {
+struct MyComparator {
   int operator()(const Slice& a, const Slice& b) const { return a.compare(b); }
 };
 
@@ -52,18 +52,18 @@ TEST(SkipTest, Empty) {
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
   //  nvm_option.pmem_path = "/mnt/hjxPMem";
   nvm_option.pmem_path = "/mnt/d";
-  std::string filename = "test.pool";
+  std::string filename = "/mnt/d/test.pool";
   PmemManager allocator(&nvm_option, filename);
-  Comparator cmp;
+  MyComparator cmp;
 
-  PersistentSkipList<Comparator> list(cmp, &allocator);
+  PersistentSkipList<MyComparator> list(cmp, &allocator);
   list.Clear();
 
   std::cout << "memusage:" << allocator.MemoryUsage() << std::endl;
   std::cout << "maxheight:" << list.GetMaxHeight() << std::endl;
   ASSERT_TRUE(!list.Contains((char*)100));
 
-  PersistentSkipList<Comparator>::Iterator iter(&list);
+  PersistentSkipList<MyComparator>::Iterator iter(&list);
   ASSERT_TRUE(!iter.Valid());
   iter.SeekToFirst();
   ASSERT_TRUE(!iter.Valid());
@@ -81,14 +81,14 @@ TEST(SkipTest, InsertAndLookup) {
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
   //  nvm_option.pmem_path = "hjxPMem";
   nvm_option.pmem_path = "/mnt/d";
-  std::string filename = "test.pool";
-  Comparator cmp;
+  std::string filename = "/mnt/d/test.pool";
+  MyComparator cmp;
 
   //创建
   {
     PmemManager allocator(&nvm_option, filename);
     std::cout << "memusage:" << allocator.MemoryUsage() << std::endl;
-    PersistentSkipList<Comparator> list(cmp, &allocator);
+    PersistentSkipList<MyComparator> list(cmp, &allocator);
     std::cout << "maxheight:" << list.GetMaxHeight() << std::endl;
     for (int i = 0; i < N; i++) {
       std::string key = strRand(10);
@@ -101,7 +101,7 @@ TEST(SkipTest, InsertAndLookup) {
 
     // Simple iterator tests
     {
-      PersistentSkipList<Comparator>::Iterator iter(&list);
+      PersistentSkipList<MyComparator>::Iterator iter(&list);
       ASSERT_TRUE(!iter.Valid());
 
       iter.SeekToFirst();
@@ -115,7 +115,7 @@ TEST(SkipTest, InsertAndLookup) {
 
     // Forward iteration test
     {
-      PersistentSkipList<Comparator>::Iterator iter(&list);
+      PersistentSkipList<MyComparator>::Iterator iter(&list);
       iter.SeekToFirst();
 
       std::cout << "===Forward iteration test===" << std::endl;
@@ -133,7 +133,7 @@ TEST(SkipTest, InsertAndLookup) {
 
     // Backward iteration test
     {
-      PersistentSkipList<Comparator>::Iterator iter(&list);
+      PersistentSkipList<MyComparator>::Iterator iter(&list);
       iter.SeekToLast();
 
       std::cout << "===Backward iteration test===" << std::endl;
@@ -152,10 +152,10 @@ TEST(SkipTest, InsertAndLookup) {
   //恢复
   {
     PmemManager allocator(&nvm_option, filename);
-    PersistentSkipList<Comparator> list(cmp, &allocator);
+    PersistentSkipList<MyComparator> list(cmp, &allocator);
     // Forward iteration test
     {
-      PersistentSkipList<Comparator>::Iterator iter(&list);
+      PersistentSkipList<MyComparator>::Iterator iter(&list);
       iter.SeekToFirst();
 
       std::cout << "===Forward iteration test===" << std::endl;
@@ -173,7 +173,7 @@ TEST(SkipTest, InsertAndLookup) {
 
     // Backward iteration test
     {
-      PersistentSkipList<Comparator>::Iterator iter(&list);
+      PersistentSkipList<MyComparator>::Iterator iter(&list);
       iter.SeekToLast();
 
       std::cout << "===Backward iteration test===" << std::endl;

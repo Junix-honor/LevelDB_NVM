@@ -1019,6 +1019,7 @@ Status VersionSet::Recover(bool* save_manifest) {
 
     MarkFileNumberUsed(prev_log_number);
     MarkFileNumberUsed(log_number);
+    MarkFileNumberUsed(map_number);
   }
 
   if (s.ok()) {
