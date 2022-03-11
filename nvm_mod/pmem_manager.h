@@ -31,11 +31,12 @@ class PmemManager : public Allocator {
 
   void Clear();
   void Sync();
+  void flush(const char* addr, size_t len);
 
  public:
   //偏移量
-  static const int MEMORY_USAGE_OFFSET = 0;             // MEMORY_USAGE偏移量
-  static const int MEMORY_USAGE_SIZE = 4;  // MEMORY_USAGE大小
+  static const int MEMORY_USAGE_OFFSET = 0;  // MEMORY_USAGE偏移量
+  static const int MEMORY_USAGE_SIZE = 4;    // MEMORY_USAGE大小
 
   static const int DATA_OFFSET =
       MEMORY_USAGE_OFFSET + MEMORY_USAGE_SIZE;  // 数据偏移量

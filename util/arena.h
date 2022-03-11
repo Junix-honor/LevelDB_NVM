@@ -37,6 +37,7 @@ class Arena : public Allocator {
 
   void Clear() {}
   void Sync() {}
+  void flush(const char* addr, size_t len) {}
   char* GetDataStart() { return nullptr; }
 
  private:

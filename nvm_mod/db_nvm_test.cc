@@ -1784,7 +1784,7 @@ TEST_F(DBTest, NoSpace) {
 TEST_F(DBTest, NonWritableFileSystem) {
   Options options = CurrentOptions();
   options.write_buffer_size = 1000;
-  options.nvm_option.write_buffer_size=1000;
+  options.nvm_option.write_buffer_size=200000;
   options.env = env_;
   Reopen(&options);
   ASSERT_LEVELDB_OK(Put("foo", "v1"));

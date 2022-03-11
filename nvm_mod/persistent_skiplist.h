@@ -406,7 +406,7 @@ void PersistentSkipList<Comparator>::Insert(const char* key, SequenceNumber s) {
     prev[i]->SetNext(i, x);
     // TODO:flush
   }
-  allocator_->Sync();
+//  allocator_->Sync();
 }
 
 template <class Comparator>
@@ -435,6 +435,6 @@ void PersistentSkipList<Comparator>::Clear() {
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, nullptr);
   }
-  allocator_->Sync();
+//  allocator_->Sync();
 }
 }  // namespace leveldb

@@ -49,6 +49,12 @@ void PmemManager::Sync() {
   else
     pmem_msync(pmem_addr, mapped_len);
 }
+void PmemManager::flush(const char* addr, size_t len) {
+  if (is_pmem)
+    pmem_persist(addr, len);
+  else
+    pmem_msync(addr, len);
+}
 void PmemManager::Clear() {
   *memory_usage_ = 0;
   alloc_bytes_remaining_ = write_buffer_size;
