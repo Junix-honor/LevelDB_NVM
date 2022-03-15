@@ -55,8 +55,9 @@ TEST(SkipTest, Empty) {
   std::string filename = "/mnt/d/test.pool";
   PmemManager allocator(&nvm_option, filename);
   MyComparator cmp;
-
-  PersistentSkipList<MyComparator> list(cmp, &allocator);
+  allocator.Clear();
+  allocator.Allocate(8);
+  PersistentSkipList<MyComparator> list(cmp, &allocator, 8);
   list.Clear();
 
   std::cout << "memusage:" << allocator.MemoryUsage() << std::endl;
@@ -88,14 +89,14 @@ TEST(SkipTest, InsertAndLookup) {
   {
     PmemManager allocator(&nvm_option, filename);
     std::cout << "memusage:" << allocator.MemoryUsage() << std::endl;
-    PersistentSkipList<MyComparator> list(cmp, &allocator);
+    PersistentSkipList<MyComparator> list(cmp, &allocator, 8);
     std::cout << "maxheight:" << list.GetMaxHeight() << std::endl;
     for (int i = 0; i < N; i++) {
       std::string key = strRand(10);
       char* buf = allocator.Allocate(key.size());
       std::strcpy(buf, key.c_str());
       if (keys.insert(key).second) {
-        list.Insert(buf, 0);
+        list.Insert(buf);
       }
     }
 
@@ -152,7 +153,7 @@ TEST(SkipTest, InsertAndLookup) {
   //恢复
   {
     PmemManager allocator(&nvm_option, filename);
-    PersistentSkipList<MyComparator> list(cmp, &allocator);
+    PersistentSkipList<MyComparator> list(cmp, &allocator, 8);
     // Forward iteration test
     {
       PersistentSkipList<MyComparator>::Iterator iter(&list);

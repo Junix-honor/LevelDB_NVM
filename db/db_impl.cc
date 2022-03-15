@@ -27,6 +27,7 @@
 #include "leveldb/status.h"
 #include "leveldb/table.h"
 #include "leveldb/table_builder.h"
+#include "leveldb/write_callback.h"
 
 #include "port/port.h"
 #include "table/block.h"
@@ -45,13 +46,41 @@ const int kNumNonTableCacheFiles = 10;
 // Information kept for every waiting writer
 struct DBImpl::Writer {
   explicit Writer(port::Mutex* mu)
-      : batch(nullptr), sync(false), done(false), cv(mu) {}
+      : batch(nullptr), callback(nullptr), sync(false), done(false), cv(mu) {}
 
   Status status;
+  Status callback_status;
   WriteBatch* batch;
+  WriteCallback* callback;
   bool sync;
   bool done;
   port::CondVar cv;
+
+  bool CheckCallback(DB* db) {
+    if (callback != nullptr) {
+      callback_status = callback->Callback(db);
+    }
+    return callback_status.ok();
+  }
+
+  Status FinalStatus() const {
+    if (!status.ok()) {
+      // a non-ok memtable write status takes presidence
+      //      assert(callback == nullptr || callback_status.ok());
+      return status;
+    } else if (!callback_status.ok()) {
+      // if the callback failed then that is the status we want
+      // because a memtable insert should not have been attempted
+      //      assert(callback != nullptr);
+      //      assert(status.ok());
+      return callback_status;
+    } else {
+      // if there is no callback then we only care about
+      // the memtable insert status
+      assert(callback == nullptr || callback_status.ok());
+      return status;
+    }
+  }
 };
 
 struct DBImpl::CompactionState {
@@ -565,7 +594,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
         mem = nullptr;
       } else {
         // mem can be nullptr if lognum exists but was empty.
-        mem_ = new MemTable(internal_comparator_);
+        mem_ = new MemTable(internal_comparator_, GetLatestSequenceNumber());
         current_write_buffer_size = options_.write_buffer_size;
         mem_->Ref();
       }
@@ -1272,6 +1301,8 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   if (imm != nullptr) imm->Ref();
   current->Ref();
 
+  SequenceNumber seq;
+
   bool have_stat_update = false;
   Version::GetStats stats;
 
@@ -1280,9 +1311,10 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {  //先向memtable中查询
+    if (mem->Get(lkey, value, &seq, &s)) {  //先向memtable中查询
       // Done
-    } else if (imm != nullptr && imm->Get(lkey, value, &s)) {  //再向imm查询
+    } else if (imm != nullptr &&
+               imm->Get(lkey, value, &seq, &s)) {  //再向imm查询
       // Done
     } else {  //最后到外存的sstables中查询
       s = current->Get(options, lkey, value, &stats);
@@ -1339,12 +1371,14 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   return DB::Delete(options, key);
 }
 
-Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
+                     WriteCallback* callback) {
   // 对于一次写，都将其封装成一个Writer
   Writer w(&mutex_);
   w.batch = updates;
   w.sync = options.sync;
   w.done = false;
+  w.callback = callback;
 
   // 加入写队列
   MutexLock l(&mutex_);
@@ -1353,7 +1387,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     w.cv.Wait();
   }
   if (w.done) {
-    return w.status;
+    return w.FinalStatus();
   }
 
   // 首先要制作出空余空间来写入
@@ -1362,7 +1396,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
-  if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
+  if (status.ok() && updates != nullptr &&
+      w.CheckCallback(this)) {  // nullptr batch is for compactions
 
     //创建WriteBatch
     WriteBatch* write_batch = BuildBatchGroup(&last_writer);
@@ -1407,6 +1442,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   }
 
   // 把 front <--> last_write 逐渐的所有writer全部剔除，先设置done=true,再唤醒
+  w.status = status;
   while (true) {
     Writer* ready = writers_.front();
     writers_.pop_front();
@@ -1424,7 +1460,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     writers_.front()->cv.Signal();
   }
 
-  return status;
+  return w.FinalStatus();
 }
 
 // REQUIRES: Writer list must be non-empty
@@ -1453,6 +1489,9 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   ++iter;  // Advance past "first"
   for (; iter != writers_.end(); ++iter) {
     Writer* w = *iter;
+    if (!w->CheckCallback(this)) {
+      break;
+    }
     if (w->sync && !first->sync) {
       // Do not include a sync write into a batch handled by a non-sync write.
       break;
@@ -1540,7 +1579,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
                                filename);
         logfile_number_ = new_map_number;
         current_write_buffer_size = options_.nvm_option.write_buffer_size;
-        mem_->Clear();
+        mem_->Clear(GetLatestSequenceNumber());
         mem_->Ref();
       } else {
         assert(versions_->PrevLogNumber() == 0);
@@ -1559,7 +1598,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
         log_ = new log::Writer(lfile);
         imm_ = mem_;
         has_imm_.store(true, std::memory_order_release);
-        mem_ = new MemTable(internal_comparator_);
+        mem_ = new MemTable(internal_comparator_, GetLatestSequenceNumber());
         current_write_buffer_size = options_.write_buffer_size;
         mem_->Ref();
       }
@@ -1650,6 +1689,74 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
 
   v->Unref();
 }
+SequenceNumber DBImpl::GetLatestSequenceNumber() const {
+  return versions_->LastSequence();
+}
+SequenceNumber DBImpl::GetEarliestMemTableSequenceNumber() const {
+  SequenceNumber earliest_seq;
+  if (has_imm_)
+    earliest_seq = imm_->GetEarliestSequenceNumber();
+  else
+    earliest_seq = mem_->GetEarliestSequenceNumber();
+  return earliest_seq;
+}
+Status DBImpl::GetLatestSequenceForKey(const Slice& key, bool cache_only,
+                                       SequenceNumber lower_bound_seq,
+                                       SequenceNumber* seq,
+                                       bool* found_record_for_key) {
+  Status s;
+  SequenceNumber snapshot;
+  snapshot = versions_->LastSequence();
+
+  *seq = kMaxSequenceNumber;
+  *found_record_for_key = false;
+
+  // 增加引用计数
+  MemTableRep* mem = mem_;
+  MemTableRep* imm = imm_;
+  mem->Ref();
+  if (imm != nullptr) imm->Ref();
+
+  std::string value;
+
+  LookupKey lkey(key, snapshot);
+
+  while (true) {
+    // mem查询
+    mem->Get(lkey, &value, seq, &s);
+    if (*seq != kMaxSequenceNumber) {
+      *found_record_for_key = true;
+      break;
+    }
+    // imm判断
+    if (mem->GetEarliestSequenceNumber() < lower_bound_seq) {
+      *found_record_for_key = false;
+      break;
+    }
+    // imm查询
+    if (imm != nullptr) {  //再向imm查询
+      imm->Get(lkey, &value, seq, &s);
+      if (*seq != kMaxSequenceNumber) {
+        *found_record_for_key = true;
+        break;
+      }
+      if (imm->GetEarliestSequenceNumber() < lower_bound_seq) {
+        *found_record_for_key = false;
+        break;
+      }
+    }
+    if (!cache_only) {
+      // TODO:最后到外存的sstables中查询
+      // s = current->Get(options, lkey, value, &stats);
+      // have_stat_update = true;
+      break;
+    }
+  }
+
+  mem->Unref();
+  if (imm != nullptr) imm->Unref();
+  return s;
+}
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
@@ -1691,7 +1798,8 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
       impl->logfile_ = lfile;
       impl->logfile_number_ = new_log_number;
       impl->log_ = new log::Writer(lfile);
-      impl->mem_ = new MemTable(impl->internal_comparator_);
+      impl->mem_ = new MemTable(impl->internal_comparator_,
+                                impl->GetLatestSequenceNumber());
       impl->current_write_buffer_size = options.write_buffer_size;
       impl->mem_->Ref();
     }

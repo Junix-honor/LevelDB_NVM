@@ -21,8 +21,13 @@ static Slice GetLengthPrefixedSlice(const char* data) {
   return Slice(p, len);
 }
 
-MemTable::MemTable(const InternalKeyComparator& comparator)
-    : comparator_(comparator), refs_(0), table_(comparator_, &arena_) {}
+MemTable::MemTable(const InternalKeyComparator& comparator,
+                   SequenceNumber latest_seq)
+    : comparator_(comparator),
+      refs_(0),
+      table_(comparator_, &arena_),
+      first_seqno_(0),
+      earliest_seqno_(latest_seq) {}
 
 MemTable::~MemTable() { assert(refs_ == 0); }
 
@@ -78,6 +83,17 @@ Iterator* MemTable::NewIterator() { return new MemTableIterator(&table_); }
 
 void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
                    const Slice& value) {
+  // The first sequence number inserted into the memtable
+  assert(first_seqno_ == 0 || s >= first_seqno_);
+  if (first_seqno_ == 0) {
+    first_seqno_ = s;
+
+    if (earliest_seqno_ == kMaxSequenceNumber) {
+      earliest_seqno_ = first_seqno_;
+    }
+    assert(first_seqno_ >= earliest_seqno_);
+  }
+
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]
@@ -101,7 +117,8 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
   table_.Insert(buf);
 }
 
-bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
+bool MemTable::Get(const LookupKey& key, std::string* value,
+                   SequenceNumber* seq, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -118,10 +135,14 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
+
+    // seq
+    const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
+    *seq = tag >> 8;
+
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8), key.user_key()) == 0) {
       // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);

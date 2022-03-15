@@ -204,6 +204,13 @@ target_sources(leveldb
         "nvm_mod/persistent_skiplist.h"
         "nvm_mod/memtable_nvm.h"
         "nvm_mod/memtable_nvm.cc"
+        "transactions/lock_tracker.h"
+        "transactions/lock_tracker.cc"
+        "transactions/optimistic_transaction_db.h"
+        "transactions/optimistic_transaction_db_impl.h"
+        "transactions/optimistic_transaction_db_impl.cc"
+        "transactions/optimistic_transaction.h"
+        "transactions/optimistic_transaction.cc"
 
         # Generator expressions
         # https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html?highlight=version_greater
@@ -224,6 +231,7 @@ target_sources(leveldb
         "${LEVELDB_PUBLIC_INCLUDE_DIR}/table_builder.h"
         "${LEVELDB_PUBLIC_INCLUDE_DIR}/table.h"
         "${LEVELDB_PUBLIC_INCLUDE_DIR}/write_batch.h"
+        "${LEVELDB_PUBLIC_INCLUDE_DIR}/write_callback.h"
         )
 
 # 指定生成leveldb需要的源文件
@@ -411,6 +419,8 @@ if (LEVELDB_BUILD_TESTS)
         leveldb_test("nvm_mod/persistent_skiplist_test.cc")
         leveldb_test("nvm_mod/memtable_nvm_test.cc")
         leveldb_test("nvm_mod/db_nvm_test.cc")
+
+        leveldb_test("transactions/optimistic_transaction_test.cc")
 
         # TODO(costan): This test also uses
         #               "util/env_{posix|windows}_test_helper.h"

@@ -43,7 +43,8 @@ class DBImpl : public DB {
   Status Put(const WriteOptions&, const Slice& key,
              const Slice& value) override;
   Status Delete(const WriteOptions&, const Slice& key) override;
-  Status Write(const WriteOptions& options, WriteBatch* updates) override;
+  Status Write(const WriteOptions& options, WriteBatch* updates,
+               WriteCallback* callback = nullptr) override;
   Status Get(const ReadOptions& options, const Slice& key,
              std::string* value) override;
   Iterator* NewIterator(const ReadOptions&) override;
@@ -52,6 +53,14 @@ class DBImpl : public DB {
   bool GetProperty(const Slice& property, std::string* value) override;
   void GetApproximateSizes(const Range* range, int n, uint64_t* sizes) override;
   void CompactRange(const Slice* begin, const Slice* end) override;
+
+  // DB Transaction needs
+  SequenceNumber GetLatestSequenceNumber() const;
+  SequenceNumber GetEarliestMemTableSequenceNumber() const;
+  Status GetLatestSequenceForKey(const Slice& key, bool cache_only,
+                                 SequenceNumber lower_bound_seq,
+                                 SequenceNumber* seq,
+                                 bool* found_record_for_key);
 
   // Extra methods (for testing) that are not in the public DB interface
 

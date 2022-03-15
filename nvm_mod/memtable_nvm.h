@@ -13,6 +13,25 @@ namespace leveldb {
 class InternalKeyComparator;
 class MemTableNVM : public MemTableRep {
  public:
+  static const int MAX_SEQUENCE_OFFSET = 0;  // MAX_SEQUENCE偏移量
+  static const int MAX_SEQUENCE_SIZE = 8;    // MAX_SEQUENCE大小
+
+  static const int MIN_SEQUENCE_OFFSET =
+      MAX_SEQUENCE_OFFSET + MAX_SEQUENCE_SIZE;  // MIN_SEQUENCE偏移量
+  static const int MIN_SEQUENCE_SIZE = 8;       // MIN_SEQUENCE大小
+
+  static const int MEM_TABLE_DATA_OFFSET =
+      MIN_SEQUENCE_OFFSET + MIN_SEQUENCE_SIZE;  // 数据偏移量
+
+ private:
+  inline char* GetPmemMinSequence() {
+    return allocator_.GetDataStart() + MIN_SEQUENCE_OFFSET;
+  }
+  inline char* GetPmemMaxSequence() {
+    return allocator_.GetDataStart() + MAX_SEQUENCE_OFFSET;
+  }
+
+ public:
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
   explicit MemTableNVM(const InternalKeyComparator& comparator,
@@ -55,11 +74,19 @@ class MemTableNVM : public MemTableRep {
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  bool Get(const LookupKey& key, std::string* value, Status* s) override;
+  bool Get(const LookupKey& key, std::string* value, SequenceNumber* seq,
+           Status* s) override;
 
-  void Clear() override;
+  void Clear(uint64_t earliest_seq) override;
   bool IsPersistent() override { return true; }
-  SequenceNumber GetMaxSequenceNumber() { return table_.GetSequenceNumber(); }
+
+  // recovery needs
+  SequenceNumber GetMaxSequenceNumber() override { return *max_sequence; }
+
+  // transaction needs
+  SequenceNumber GetEarliestSequenceNumber() override {
+    return *earliest_sequence;
+  }
 
   ~MemTableNVM() override;
 
@@ -74,7 +101,8 @@ class MemTableNVM : public MemTableRep {
 
   typedef PersistentSkipList<KeyComparator> Table;
 
-  // Private since only Unref() should be used to delete it
+  uint64_t* earliest_sequence;
+  uint64_t* max_sequence;
 
   KeyComparator comparator_;
   int refs_;

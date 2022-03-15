@@ -17,15 +17,18 @@ class MemTableRep {
   virtual void Add(SequenceNumber seq, ValueType type, const Slice& key,
                    const Slice& value) = 0;
 
-  virtual bool Get(const LookupKey& key, std::string* value, Status* s) = 0;
+  virtual bool Get(const LookupKey& key, std::string* value,
+                   SequenceNumber* seq, Status* s) = 0;
 
-  virtual void Clear() = 0;
+  virtual void Clear(uint64_t earliest_seq) = 0;
 
   virtual bool IsPersistent() = 0;
 
   virtual SequenceNumber GetMaxSequenceNumber() = 0;
 
   virtual ~MemTableRep() {}
+
+  virtual SequenceNumber GetEarliestSequenceNumber() = 0;
 
   //  class MemTableIterator {
   //    virtual ~MemTableIterator() {}

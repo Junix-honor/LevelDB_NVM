@@ -5,7 +5,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <string>
-
+#include "util/testutil.h"
 #include "util/allocator.h"
 #include "util/random.h"
 
@@ -17,22 +17,18 @@ class PersistentSkipList {
   static const int MAX_HEIGHT_OFFSET = 0;  // MAX_HEIGHT偏移量
   static const int MAX_HEIGHT_SIZE = 4;    // MAX_HEIGHT大小
 
-  static const int SEQUENCE_OFFSET =
-      MAX_HEIGHT_OFFSET + MAX_HEIGHT_SIZE;  // MAX_HEIGHT偏移量
-  static const int SEQUENCE_SIZE = 8;       // MAX_HEIGHT大小
-
   static const int SKIP_LIST_DATA_OFFSET =
-      SEQUENCE_OFFSET + SEQUENCE_SIZE;  // 数据偏移量
+      MAX_HEIGHT_OFFSET + MAX_HEIGHT_SIZE;  // 数据偏移量
 
  private:
+  const int MEM_TABLE_DATA_OFFSET;
   inline char* GetSkipListDataStart() {
-    return allocator_->GetDataStart() + SKIP_LIST_DATA_OFFSET;
+    return allocator_->GetDataStart() + MEM_TABLE_DATA_OFFSET +
+           SKIP_LIST_DATA_OFFSET;
   }
   inline char* GetPmemMaxHeight() {
-    return allocator_->GetDataStart() + MAX_HEIGHT_OFFSET;
-  }
-  inline char* GetSequence() {
-    return allocator_->GetDataStart() + SEQUENCE_OFFSET;
+    return allocator_->GetDataStart() + MEM_TABLE_DATA_OFFSET +
+           MAX_HEIGHT_OFFSET;
   }
 
  private:
@@ -42,23 +38,20 @@ class PersistentSkipList {
   // Create a new SkipList object that will use "cmp" for comparing keys,
   // and will allocate memory using "*arena".  Objects allocated in the arena
   // must remain allocated for the lifetime of the skiplist object.
-  explicit PersistentSkipList(Comparator cmp, Allocator* allocator);
+  explicit PersistentSkipList(Comparator cmp, Allocator* allocator,
+                              int mem_table_data_offset);
 
   PersistentSkipList(const PersistentSkipList&) = delete;
   PersistentSkipList& operator=(const PersistentSkipList&) = delete;
 
   // Insert key into the list.
   // REQUIRES: nothing that compares equal to key is currently in the list.
-  void Insert(const char* key, SequenceNumber s = 0);
+  void Insert(const char* key);
 
   // Returns true iff an entry that compares equal to key is in the list.
   bool Contains(const char* key) const;
 
   void Clear();
-
-  SequenceNumber GetSequenceNumber() {
-    return *(reinterpret_cast<SequenceNumber*>(GetSequence()));
-  }
 
   // Iteration over the contents of a skip list
   class Iterator {
@@ -140,7 +133,6 @@ class PersistentSkipList {
   // values are ok.
   std::atomic<int32_t> max_height_;  // Height of the entire list
   int32_t* pmem_max_height_;
-  uint64_t* sequence;
 
   // Read/written only by Insert().
   Random rnd_;
@@ -360,17 +352,19 @@ PersistentSkipList<Comparator>::FindLast() const {
 
 // skiplist构造函数
 template <class Comparator>
-PersistentSkipList<Comparator>::PersistentSkipList(Comparator cmp,
-                                                   Allocator* allocator)
-    : compare_(cmp), allocator_(allocator), rnd_(0xdeadbeef) {
+PersistentSkipList<Comparator>::PersistentSkipList(
+    Comparator cmp, Allocator* allocator, const int mem_table_data_offset)
+    : compare_(cmp),
+      allocator_(allocator),
+      rnd_(0xdeadbeef),
+      MEM_TABLE_DATA_OFFSET(mem_table_data_offset) {
   pmem_max_height_ = (int32_t*)GetPmemMaxHeight();
-  sequence = (uint64_t*)GetSequence();
   head_ = (Node*)GetSkipListDataStart();
   max_height_.store(*pmem_max_height_, std::memory_order_relaxed);
 }
 
 template <class Comparator>
-void PersistentSkipList<Comparator>::Insert(const char* key, SequenceNumber s) {
+void PersistentSkipList<Comparator>::Insert(const char* key) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];
@@ -380,7 +374,6 @@ void PersistentSkipList<Comparator>::Insert(const char* key, SequenceNumber s) {
   assert(x == NULL ||
          !Equal(key, reinterpret_cast<char*>((intptr_t)x - x->key_offset)));
 
-  *sequence = s;
   int height = RandomHeight();
   if (height > GetMaxHeight()) {
     for (int i = GetMaxHeight(); i < height; i++) {
@@ -406,7 +399,7 @@ void PersistentSkipList<Comparator>::Insert(const char* key, SequenceNumber s) {
     prev[i]->SetNext(i, x);
     // TODO:flush
   }
-//  allocator_->Sync();
+  //  allocator_->Sync();
 }
 
 template <class Comparator>
@@ -421,13 +414,8 @@ bool PersistentSkipList<Comparator>::Contains(const char* key) const {
 }
 template <class Comparator>
 void PersistentSkipList<Comparator>::Clear() {
-  allocator_->Clear();
   pmem_max_height_ =
       reinterpret_cast<int32_t*>(allocator_->Allocate(sizeof(int32_t)));
-  sequence =
-      reinterpret_cast<uint64_t*>(allocator_->Allocate(sizeof(uint64_t)));
-
-  *sequence = 0;
   *pmem_max_height_ = 1;
   max_height_.store(1, std::memory_order_relaxed);
   head_ = NewNode(0, kMaxHeight);
@@ -435,6 +423,6 @@ void PersistentSkipList<Comparator>::Clear() {
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, nullptr);
   }
-//  allocator_->Sync();
+  //  allocator_->Sync();
 }
 }  // namespace leveldb

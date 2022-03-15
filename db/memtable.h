@@ -22,7 +22,8 @@ class MemTable : public MemTableRep {
  public:
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
-  explicit MemTable(const InternalKeyComparator& comparator);
+  explicit MemTable(const InternalKeyComparator& comparator,
+                    SequenceNumber latest_seq = kMaxSequenceNumber);
 
   MemTable(const MemTable&) = delete;
   MemTable& operator=(const MemTable&) = delete;
@@ -61,13 +62,16 @@ class MemTable : public MemTableRep {
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  bool Get(const LookupKey& key, std::string* value, Status* s);
+  bool Get(const LookupKey& key, std::string* value, SequenceNumber* seq,
+           Status* s);
 
-  void Clear() {}
+  // nvm needs
+  void Clear(uint64_t earliest_seq) {}
   bool IsPersistent() { return false; }
-
-  // TODO:实现
   SequenceNumber GetMaxSequenceNumber() { return 0; }
+
+  // transaction needs
+  SequenceNumber GetEarliestSequenceNumber() { return earliest_seqno_; }
 
   ~MemTable();  // Private since only Unref() should be used to delete it
 
@@ -84,6 +88,9 @@ class MemTable : public MemTableRep {
   };
 
   typedef SkipList<const char*, KeyComparator> Table;
+
+  SequenceNumber first_seqno_;
+  SequenceNumber earliest_seqno_;
 
   KeyComparator comparator_;
   int refs_;

@@ -22,7 +22,10 @@ MemTableNVM::MemTableNVM(const InternalKeyComparator& comparator,
     : comparator_(comparator),
       refs_(0),
       allocator_(nvm_option, filename),
-      table_(comparator_, &allocator_) {}
+      table_(comparator_, &allocator_, MEM_TABLE_DATA_OFFSET) {
+  earliest_sequence = (uint64_t*)GetPmemMinSequence();
+  max_sequence = (uint64_t*)GetPmemMaxSequence();
+}
 
 MemTableNVM::~MemTableNVM() { assert(refs_ == 0); }
 
@@ -102,10 +105,12 @@ void MemTableNVM::Add(SequenceNumber s, ValueType type, const Slice& key,
   std::memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
   pmem_memcpy_persist(pmem_buf, buf, encoded_len);
-  table_.Insert(pmem_buf, s);
+  table_.Insert(pmem_buf);
+  if (s > *max_sequence) *max_sequence = s;
 }
 
-bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
+bool MemTableNVM::Get(const LookupKey& key, std::string* value,
+                      SequenceNumber* seq, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -122,10 +127,14 @@ bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
+
+    // seq
+    const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
+    *seq = tag >> 8;
+
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8), key.user_key()) == 0) {
       // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
@@ -140,8 +149,15 @@ bool MemTableNVM::Get(const LookupKey& key, std::string* value, Status* s) {
   }
   return false;
 }
-void MemTableNVM::Clear() {
+void MemTableNVM::Clear(uint64_t earliest_seq) {
   allocator_.Clear();
+  max_sequence =
+      reinterpret_cast<uint64_t*>(allocator_.Allocate(sizeof(uint64_t)));
+  *max_sequence = 0;
+
+  earliest_sequence =
+      reinterpret_cast<uint64_t*>(allocator_.Allocate(sizeof(uint64_t)));
+  *earliest_sequence = earliest_seq;
   table_.Clear();
   refs_ = 0;
 }

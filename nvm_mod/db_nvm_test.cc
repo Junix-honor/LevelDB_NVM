@@ -608,7 +608,7 @@ TEST_F(DBTest, GetFromImmutableLayer) {
     Options options = CurrentOptions();
     options.env = env_;
     options.write_buffer_size = 100000;  // Small write buffer
-    options.nvm_option.write_buffer_size=100000;
+    options.nvm_option.write_buffer_size = 100000;
     Reopen(&options);
 
     ASSERT_LEVELDB_OK(Put("foo", "v1"));
@@ -1042,7 +1042,7 @@ TEST_F(DBTest, RecoverDuringMemtableCompaction) {
     Options options = CurrentOptions();
     options.env = env_;
     options.write_buffer_size = 1000000;
-    options.nvm_option.write_buffer_size=1000000;
+    options.nvm_option.write_buffer_size = 1000000;
     Reopen(&options);
 
     // Trigger a long memtable compaction and reopen the database during it
@@ -1070,7 +1070,7 @@ static std::string Key(int i) {
 TEST_F(DBTest, MinorCompactionsHappen) {
   Options options = CurrentOptions();
   options.write_buffer_size = 10000;
-  options.nvm_option.write_buffer_size=10000;
+  options.nvm_option.write_buffer_size = 10000;
   Reopen(&options);
 
   const int N = 500;
@@ -1108,7 +1108,7 @@ TEST_F(DBTest, RecoverWithLargeLog) {
   // we flush table files in the middle of a large log file.
   Options options = CurrentOptions();
   options.write_buffer_size = 100000;
-  options.nvm_option.write_buffer_size=100000;
+  options.nvm_option.write_buffer_size = 100000;
   Reopen(&options);
   ASSERT_EQ(NumTableFilesAtLevel(0), 3);
   ASSERT_EQ(std::string(200000, '1'), Get("big1"));
@@ -1121,7 +1121,7 @@ TEST_F(DBTest, RecoverWithLargeLog) {
 TEST_F(DBTest, CompactionsGenerateMultipleFiles) {
   Options options = CurrentOptions();
   options.write_buffer_size = 100000000;  // Large write buffer
-  options.nvm_option.write_buffer_size=100000000;
+  options.nvm_option.write_buffer_size = 100000000;
   Reopen(&options);
 
   Random rnd(301);
@@ -1149,7 +1149,7 @@ TEST_F(DBTest, RepeatedWritesToSameKey) {
   Options options = CurrentOptions();
   options.env = env_;
   options.write_buffer_size = 100000;  // Small write buffer
-  options.nvm_option.write_buffer_size=100000;
+  options.nvm_option.write_buffer_size = 100000;
   Reopen(&options);
 
   // We must have at most one file per level except for level-0,
@@ -1219,7 +1219,7 @@ TEST_F(DBTest, ApproximateSizes) {
   do {
     Options options = CurrentOptions();
     options.write_buffer_size = 100000000;  // Large write buffer
-    options.nvm_option.write_buffer_size=100000000;
+    options.nvm_option.write_buffer_size = 100000000;
     options.compression = kNoCompression;
     DestroyAndReopen();
 
@@ -1784,7 +1784,7 @@ TEST_F(DBTest, NoSpace) {
 TEST_F(DBTest, NonWritableFileSystem) {
   Options options = CurrentOptions();
   options.write_buffer_size = 1000;
-  options.nvm_option.write_buffer_size=200000;
+  options.nvm_option.write_buffer_size = 200000;
   options.env = env_;
   Reopen(&options);
   ASSERT_LEVELDB_OK(Put("foo", "v1"));
@@ -2106,7 +2106,8 @@ class ModelDB : public DB {
   void ReleaseSnapshot(const Snapshot* snapshot) override {
     delete reinterpret_cast<const ModelSnapshot*>(snapshot);
   }
-  Status Write(const WriteOptions& options, WriteBatch* batch) override {
+  Status Write(const WriteOptions& options, WriteBatch* batch,
+               WriteCallback* callback = nullptr) override {
     class Handler : public WriteBatch::Handler {
      public:
       KVMap* map_;

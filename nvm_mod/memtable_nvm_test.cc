@@ -83,7 +83,7 @@ TEST(MemTableNVMTest, InsertAndLookup) {
   {
     MemTableNVM memtable(cmp2, &nvm_option, filename);
 
-    memtable.Clear();
+    memtable.Clear(0);
     {
       std::string key = "";
       std::string value = strRand(2);
@@ -97,7 +97,8 @@ TEST(MemTableNVMTest, InsertAndLookup) {
       Status s;
       std::string get_value;
       LookupKey lookupkey(key, seq);
-      ASSERT_TRUE(memtable.Get(lookupkey, &get_value, &s));
+      SequenceNumber get_seq;
+      ASSERT_TRUE(memtable.Get(lookupkey, &get_value, &seq, &s));
       std::cout << "look up key:" << key << " value:" << get_value << std::endl;
       ASSERT_EQ(value, get_value);
     }
@@ -113,7 +114,8 @@ TEST(MemTableNVMTest, InsertAndLookup) {
       Status s;
       std::string get_value;
       LookupKey lookupkey(key, seq);
-      ASSERT_TRUE(memtable.Get(lookupkey, &get_value, &s));
+      SequenceNumber get_seq;
+      ASSERT_TRUE(memtable.Get(lookupkey, &get_value, &seq, &s));
       std::cout << "look up key:" << key << " value:" << get_value << std::endl;
       ASSERT_EQ(value, get_value);
     }

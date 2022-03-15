@@ -60,6 +60,15 @@ std::string Status::ToString() const {
       case kIOError:
         type = "IO error: ";
         break;
+      case kTimedOut:
+        type = "Time out:";
+        break;
+      case kBusy:
+        type = "Busy:";
+        break;
+      case kTryAgain:
+        type = "Try again:";
+        break;
       default:
         std::snprintf(tmp, sizeof(tmp),
                       "Unknown code(%d): ", static_cast<int>(code()));
