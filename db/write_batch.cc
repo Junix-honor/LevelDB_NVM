@@ -18,7 +18,10 @@
 #include "db/dbformat.h"
 #include "db/memtablerep.h"
 #include "db/write_batch_internal.h"
+#include <leveldb/write_batch.h>
+
 #include "leveldb/db.h"
+
 #include "util/coding.h"
 
 namespace leveldb {
@@ -111,6 +114,52 @@ void WriteBatch::Delete(const Slice& key) {
 void WriteBatch::Append(const WriteBatch& source) {
   WriteBatchInternal::Append(this, &source);
 }
+bool WriteBatch::Get(const Slice& key, std::string* value, Status* s) {
+  Slice input(rep_);
+  if (input.size() < kHeader) {
+    *s = Status::Corruption("malformed WriteBatch (too small)");
+    return false;
+  }
+
+  input.remove_prefix(kHeader);
+  Slice key_, value_;
+  while (!input.empty()) {
+    char tag = input[0];
+    input.remove_prefix(1);
+    switch (tag) {
+      case kTypeValue:
+        if (GetLengthPrefixedSlice(&input, &key_) &&
+            GetLengthPrefixedSlice(&input, &value_)) {
+          if (key_.compare(key) == 0) {
+            value->assign(value_.data(), value_.size());
+            *s = Status::OK();
+            return true;
+          }
+        } else {
+          *s = Status::Corruption("bad WriteBatch Put");
+          return false;
+        }
+        break;
+
+      case kTypeDeletion:
+        if (GetLengthPrefixedSlice(&input, &key_)) {
+          if (key_.compare(key) == 0) {
+            *s = Status::NotFound(key.ToString());
+            return true;
+          }
+
+        } else {
+          *s = Status::Corruption("bad WriteBatch Delete");
+          return false;
+        }
+        break;
+      default:
+        *s = Status::Corruption("unknown WriteBatch tag");
+        return false;
+    }
+  }
+  return false;
+}
 
 namespace {
 class MemTableInserter : public WriteBatch::Handler {
@@ -129,7 +178,8 @@ class MemTableInserter : public WriteBatch::Handler {
 };
 }  // namespace
 
-Status WriteBatchInternal::InsertInto(const WriteBatch* b, MemTableRep* memtable) {
+Status WriteBatchInternal::InsertInto(const WriteBatch* b,
+                                      MemTableRep* memtable) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;

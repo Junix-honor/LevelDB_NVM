@@ -22,6 +22,12 @@ class OptimisticTransaction {
              const bool assume_tracked = false);
   Status Delete(const Slice& key, const bool assume_tracked = false);
 
+  Status Get(const ReadOptions& options, const Slice& key, std::string* value);
+
+  Status GetForUpdate(const ReadOptions& options, const Slice& key,
+                      std::string* value, bool exclusive = true,
+                      const bool do_validate = true);
+
   Status Commit();
 
   Status Rollback();
@@ -29,6 +35,11 @@ class OptimisticTransaction {
   void Clear();
 
   Status CheckTransactionForConflicts();
+
+  const Snapshot* GetSnapshot() const { return snapshot_.get(); }
+  void SetSnapshot();
+  void ClearSnapshot() { snapshot_.reset(); }
+  void ReleaseSnapshot(const Snapshot* snapshot, DB* db);
 
  private:
   Status TryLock(const Slice& key, bool read_only, bool exclusive,
@@ -45,6 +56,7 @@ class OptimisticTransaction {
   DB* db_;
   DBImpl* dbimpl_;
   PointLockTracker tracked_locks_;
+  std::shared_ptr<const Snapshot> snapshot_;
 
   WriteOptions write_options_;
   OptimisticTransactionDB* txn_db_;

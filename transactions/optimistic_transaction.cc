@@ -1,5 +1,6 @@
 #include "optimistic_transaction.h"
 
+#include <functional>
 #include <inttypes.h>
 
 namespace leveldb {
@@ -15,6 +16,8 @@ void OptimisticTransaction::Reinitialize(OptimisticTransactionDB* txn_db,
   db_ = txn_db->GetBaseDB();
   dbimpl_ = static_cast<DBImpl*>(db_);
   write_options_ = write_options;
+  Clear();
+  ClearSnapshot();
 }
 Status OptimisticTransaction::Put(const Slice& key, const Slice& value,
                                   const bool assume_tracked) {
@@ -44,7 +47,11 @@ Status OptimisticTransaction::TryLock(const Slice& key, bool read_only,
     return Status::OK();
   }
   SequenceNumber seq;
-  seq = dbimpl_->GetLatestSequenceNumber();
+  if (snapshot_) {
+    seq = snapshot_->sequence_number();
+  } else {
+    seq = dbimpl_->GetLatestSequenceNumber();
+  }
   std::string key_str = key.ToString();
   TrackKey(key_str, seq, read_only, exclusive);
 
@@ -165,6 +172,33 @@ Status OptimisticTransaction::CheckKey(SequenceNumber earliest_seq,
   }
 
   return result;
+}
+Status OptimisticTransaction::Get(const ReadOptions& options, const Slice& key,
+                                  std::string* value) {
+  Status s;
+  if (write_batch_.Get(key, value, &s)) return s;
+  return dbimpl_->Get(options, key, value);
+}
+Status OptimisticTransaction::GetForUpdate(const ReadOptions& options,
+                                           const Slice& key, std::string* value,
+                                           bool exclusive,
+                                           const bool do_validate) {
+  Status s = TryLock(key, true /* read_only */, exclusive /* exclusive */,
+                     do_validate);
+  if (s.ok()) {
+    s = Get(options, key, value);
+  }
+  return s;
+}
+void OptimisticTransaction::SetSnapshot() {
+  const Snapshot* snapshot = dbimpl_->GetSnapshot();
+  snapshot_.reset(snapshot, std::bind(&OptimisticTransaction::ReleaseSnapshot,
+                                      this, std::placeholders::_1, db_));
+}
+void OptimisticTransaction::ReleaseSnapshot(const Snapshot* snapshot, DB* db) {
+  if (snapshot != nullptr) {
+    db->ReleaseSnapshot(snapshot);
+  }
 }
 
 };  // namespace leveldb

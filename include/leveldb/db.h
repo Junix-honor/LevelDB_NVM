@@ -17,6 +17,7 @@ namespace leveldb {
 // Update CMakeLists.txt if you change these
 static const int kMajorVersion = 1;
 static const int kMinorVersion = 23;
+typedef uint64_t SequenceNumber;
 
 struct Options;
 struct ReadOptions;
@@ -28,6 +29,9 @@ class WriteCallback;
 // A Snapshot is an immutable object and can therefore be safely
 // accessed from multiple threads without any external synchronization.
 class LEVELDB_EXPORT Snapshot {
+ public:
+  virtual SequenceNumber sequence_number() const = 0;
+
  protected:
   virtual ~Snapshot();
 };

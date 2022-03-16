@@ -23,7 +23,7 @@ class OptimisticTransactionDB : public DB {
       const WriteOptions& write_options,
       OptimisticTransaction* old_txn = nullptr) = 0;
 
-  ~OptimisticTransactionDB() override = default;
+  ~OptimisticTransactionDB() override { delete db_; };
 
   DB* GetBaseDB() { return db_; }
 

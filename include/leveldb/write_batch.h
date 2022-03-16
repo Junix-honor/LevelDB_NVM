@@ -53,6 +53,8 @@ class LEVELDB_EXPORT WriteBatch {
   // If the database contains a mapping for "key", erase it.  Else do nothing.
   void Delete(const Slice& key);
 
+  bool Get(const Slice& key, std::string* value, Status* s);
+
   // Clear all updates buffered in this batch.
   void Clear();
 

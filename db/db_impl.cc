@@ -1396,8 +1396,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
 
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
-  if (status.ok() && updates != nullptr &&
-      w.CheckCallback(this)) {  // nullptr batch is for compactions
+  if (status.ok() && w.CheckCallback(this) &&
+      updates != nullptr) {  // nullptr batch is for compactions
 
     //创建WriteBatch
     WriteBatch* write_batch = BuildBatchGroup(&last_writer);
