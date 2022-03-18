@@ -2070,6 +2070,7 @@ class ModelDB : public DB {
  public:
   class ModelSnapshot : public Snapshot {
    public:
+    SequenceNumber sequence_number() const { return 0; }
     KVMap map_;
   };
 

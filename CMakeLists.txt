@@ -34,6 +34,7 @@ endif (WIN32)
 option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
 option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" ON)
 option(LEVELDB_INSTALL "Install LevelDB's header and library" ON)
+option(LEVELDB_NETWORK "Build LevelDB's network" ON)
 
 # CHECK_INCLUDE_FILE(<include> <variable> [<flags>])
 include(CheckIncludeFile)
@@ -542,3 +543,19 @@ if (LEVELDB_INSTALL)
             DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
     )
 endif (LEVELDB_INSTALL)
+
+if (LEVELDB_NETWORK)
+    add_executable(leveldb_server
+            "${PROJECT_BINARY_DIR}/${LEVELDB_PORT_CONFIG_DIR}/port_config.h"
+            "network/network_format.h"
+            "network/server.cc"
+
+            )
+    target_link_libraries(leveldb_server leveldb)
+
+    add_executable(leveldb_client
+            "network/network_format.h"
+            "network/client.cc"
+            )
+
+endif (LEVELDB_NETWORK)
