@@ -86,7 +86,9 @@ static bool FLAGS_comparisons = false;
 
 // Number of bytes to buffer in memtable before compacting
 // (initialized to default value by "main")
-static int FLAGS_write_buffer_size = 0;
+static size_t FLAGS_write_buffer_size = 0;
+
+static size_t FLAGS_nvm_write_buffer_size = 0;
 
 // Number of bytes written to each file.
 // (initialized to default value by "main")
@@ -117,6 +119,9 @@ static bool FLAGS_use_existing_db = false;
 
 // If true, reuse existing log/MANIFEST files when re-opening a database.
 static bool FLAGS_reuse_logs = false;
+
+// If true, use nvm
+static bool FLAGS_use_nvm = false;
 
 // Use the db with the following name.
 static const char* FLAGS_db = nullptr;
@@ -763,6 +768,8 @@ class Benchmark {
     options.create_if_missing = !FLAGS_use_existing_db;
     options.block_cache = cache_;
     options.write_buffer_size = FLAGS_write_buffer_size;
+    options.nvm_option.write_buffer_size = FLAGS_nvm_write_buffer_size;
+    options.nvm_option.use_nvm_mem_module = FLAGS_use_nvm;
     options.max_file_size = FLAGS_max_file_size;
     options.block_size = FLAGS_block_size;
     if (FLAGS_comparisons) {
@@ -1020,14 +1027,17 @@ class Benchmark {
 
 int main(int argc, char** argv) {
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
+  FLAGS_nvm_write_buffer_size = leveldb::Options().nvm_option.write_buffer_size;
   FLAGS_max_file_size = leveldb::Options().max_file_size;
   FLAGS_block_size = leveldb::Options().block_size;
   FLAGS_open_files = leveldb::Options().max_open_files;
+  FLAGS_use_nvm=leveldb::Options().nvm_option.use_nvm_mem_module;
   std::string default_db_path;
 
   for (int i = 1; i < argc; i++) {
     double d;
     int n;
+    unsigned long long ulln;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -1055,6 +1065,9 @@ int main(int argc, char** argv) {
       FLAGS_value_size = n;
     } else if (sscanf(argv[i], "--write_buffer_size=%d%c", &n, &junk) == 1) {
       FLAGS_write_buffer_size = n;
+    } else if (sscanf(argv[i], "--nvm_write_buffer_size=%llu%c", &ulln, &junk) ==
+               1) {
+      FLAGS_nvm_write_buffer_size = ulln;
     } else if (sscanf(argv[i], "--max_file_size=%d%c", &n, &junk) == 1) {
       FLAGS_max_file_size = n;
     } else if (sscanf(argv[i], "--block_size=%d%c", &n, &junk) == 1) {
@@ -1069,6 +1082,8 @@ int main(int argc, char** argv) {
       FLAGS_open_files = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
+    } else if (strncmp(argv[i], "--nvm", 5) == 0) {
+      FLAGS_use_nvm=true;
     } else {
       std::fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       std::exit(1);

@@ -50,9 +50,8 @@ std::string strRand(int length) {  // length: 产生字符串的长度
 TEST(SkipTest, Empty) {
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  //  nvm_option.pmem_path = "/mnt/hjxPMem";
-  nvm_option.pmem_path = "/mnt/d";
-  std::string filename = "/mnt/d/test.pool";
+  nvm_option.pmem_path = "/mnt/hjxPMem";
+  std::string filename = "/mnt/hjxPMem/test.pool";
   PmemManager allocator(&nvm_option, filename);
   MyComparator cmp;
   allocator.Clear();
@@ -80,9 +79,8 @@ TEST(SkipTest, InsertAndLookup) {
 
   NVMOption nvm_option;
   nvm_option.write_buffer_size = 4 * 1024 * 1024;
-  //  nvm_option.pmem_path = "hjxPMem";
-  nvm_option.pmem_path = "/mnt/d";
-  std::string filename = "/mnt/d/test.pool";
+  nvm_option.pmem_path = "/mnt/hjxPMem";
+  std::string filename = "/mnt/hjxPMem/test.pool";
   MyComparator cmp;
 
   //创建

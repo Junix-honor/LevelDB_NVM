@@ -243,7 +243,7 @@ class DBTest : public testing::Test {
     Options options;
     options.reuse_logs = false;
     options.nvm_option.use_nvm_mem_module = true;
-    options.nvm_option.pmem_path = "/mnt/d/db_test";
+    options.nvm_option.pmem_path = "/mnt/hjxPMem/db_test";
     DestroyDB(dbname_, options);
     db_ = nullptr;
     Reopen();
@@ -254,7 +254,7 @@ class DBTest : public testing::Test {
     Options options;
     options.reuse_logs = false;
     options.nvm_option.use_nvm_mem_module = true;
-    options.nvm_option.pmem_path = "/mnt/d/db_test";
+    options.nvm_option.pmem_path = "/mnt/hjxPMem/db_test";
     DestroyDB(dbname_, options);
     delete env_;
     delete filter_policy_;
@@ -277,7 +277,7 @@ class DBTest : public testing::Test {
     Options options;
     options.reuse_logs = false;
     options.nvm_option.use_nvm_mem_module = true;
-    options.nvm_option.pmem_path = "/mnt/d/db_test";
+    options.nvm_option.pmem_path = "/mnt/hjxPMem/db_test";
     switch (option_config_) {
       case kReuse:
         options.reuse_logs = true;
@@ -311,7 +311,7 @@ class DBTest : public testing::Test {
     Options destroy_options;
     destroy_options.reuse_logs = false;
     destroy_options.nvm_option.use_nvm_mem_module = true;
-    destroy_options.nvm_option.pmem_path = "/mnt/d/db_test";
+    destroy_options.nvm_option.pmem_path = "/mnt/hjxPMem/db_test";
     DestroyDB(dbname_, destroy_options);
     ASSERT_LEVELDB_OK(TryReopen(options));
   }

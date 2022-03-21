@@ -106,7 +106,10 @@ void MemTableNVM::Add(SequenceNumber s, ValueType type, const Slice& key,
   assert(p + val_size == buf + encoded_len);
   pmem_memcpy_persist(pmem_buf, buf, encoded_len);
   table_.Insert(pmem_buf);
-  if (s > *max_sequence) *max_sequence = s;
+  if (s > *max_sequence) {
+    *max_sequence = s;
+    allocator_.flush(reinterpret_cast<const char*>(max_sequence), sizeof(max_sequence));
+  }
 }
 
 bool MemTableNVM::Get(const LookupKey& key, std::string* value,
@@ -154,10 +157,13 @@ void MemTableNVM::Clear(uint64_t earliest_seq) {
   max_sequence =
       reinterpret_cast<uint64_t*>(allocator_.Allocate(sizeof(uint64_t)));
   *max_sequence = 0;
+  allocator_.flush(reinterpret_cast<const char*>(max_sequence), sizeof(max_sequence));
 
   earliest_sequence =
       reinterpret_cast<uint64_t*>(allocator_.Allocate(sizeof(uint64_t)));
   *earliest_sequence = earliest_seq;
+  allocator_.flush(reinterpret_cast<const char*>(earliest_sequence), sizeof(earliest_sequence));
+  
   table_.Clear();
   refs_ = 0;
 }

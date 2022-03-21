@@ -15,7 +15,7 @@ template <class Comparator>
 class PersistentSkipList {
  public:
   static const int MAX_HEIGHT_OFFSET = 0;  // MAX_HEIGHT偏移量
-  static const int MAX_HEIGHT_SIZE = 4;    // MAX_HEIGHT大小
+  static const int MAX_HEIGHT_SIZE = 8;    // MAX_HEIGHT大小
 
   static const int SKIP_LIST_DATA_OFFSET =
       MAX_HEIGHT_OFFSET + MAX_HEIGHT_SIZE;  // 数据偏移量
@@ -92,7 +92,7 @@ class PersistentSkipList {
     Node* node_;
     // Intentionally copyable
   };
-  inline int32_t GetMaxHeight() const {
+  inline int64_t GetMaxHeight() const {
     return max_height_.load(std::memory_order_relaxed);
   }
 
@@ -131,8 +131,8 @@ class PersistentSkipList {
 
   // Modified only by Insert().  Read racily by readers, but stale
   // values are ok.
-  std::atomic<int32_t> max_height_;  // Height of the entire list
-  int32_t* pmem_max_height_;
+  std::atomic<int64_t> max_height_;  // Height of the entire list
+  int64_t* pmem_max_height_;
 
   // Read/written only by Insert().
   Random rnd_;
@@ -358,7 +358,7 @@ PersistentSkipList<Comparator>::PersistentSkipList(
       allocator_(allocator),
       rnd_(0xdeadbeef),
       MEM_TABLE_DATA_OFFSET(mem_table_data_offset) {
-  pmem_max_height_ = (int32_t*)GetPmemMaxHeight();
+  pmem_max_height_ = (int64_t*)GetPmemMaxHeight();
   head_ = (Node*)GetSkipListDataStart();
   max_height_.store(*pmem_max_height_, std::memory_order_relaxed);
 }
@@ -388,7 +388,7 @@ void PersistentSkipList<Comparator>::Insert(const char* key) {
     // keys.  In the latter case the reader will use the new node.
     max_height_.store(height, std::memory_order_relaxed);
     *pmem_max_height_ = max_height_;
-    // TODO: flush
+    allocator_->flush(reinterpret_cast<const char*>(pmem_max_height_), sizeof(pmem_max_height_));
   }
 
   x = NewNode(key, height);
@@ -397,9 +397,9 @@ void PersistentSkipList<Comparator>::Insert(const char* key) {
     // we publish a pointer to "x" in prev[i].
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
-    // TODO:flush
+    allocator_->flush(reinterpret_cast<const char*>(x), sizeof(x));
+    allocator_->flush(reinterpret_cast<const char*>(prev[i]), sizeof(prev[i]));
   }
-  //  allocator_->Sync();
 }
 
 template <class Comparator>
@@ -415,14 +415,14 @@ bool PersistentSkipList<Comparator>::Contains(const char* key) const {
 template <class Comparator>
 void PersistentSkipList<Comparator>::Clear() {
   pmem_max_height_ =
-      reinterpret_cast<int32_t*>(allocator_->Allocate(sizeof(int32_t)));
+      reinterpret_cast<int64_t*>(allocator_->Allocate(sizeof(int64_t)));
   *pmem_max_height_ = 1;
   max_height_.store(1, std::memory_order_relaxed);
   head_ = NewNode(0, kMaxHeight);
-  // TODO: flush
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, nullptr);
   }
-  //  allocator_->Sync();
+   allocator_->flush(reinterpret_cast<const char*>(head_), sizeof(head_));
+   allocator_->flush(reinterpret_cast<const char*>(pmem_max_height_), sizeof(pmem_max_height_));
 }
 }  // namespace leveldb

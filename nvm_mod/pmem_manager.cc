@@ -6,7 +6,7 @@ PmemManager::PmemManager(const NVMOption* nvm_option, std::string filename) {
   pmem_path = nvm_option->pmem_path;
   pmem_file_name = filename;
   OpenNVMFile();
-  memory_usage_ = (uint32_t*)GetMemoryUsage();
+  memory_usage_ = (size_t*)GetMemoryUsage();
   alloc_bytes_remaining_ = write_buffer_size - *memory_usage_;
   alloc_ptr_ = GetDataStart() + *memory_usage_;
 }
@@ -37,6 +37,7 @@ char* PmemManager::AllocateAligned(size_t bytes) {
     alloc_ptr_ += needed;
     alloc_bytes_remaining_ -= needed;
     *memory_usage_ = *memory_usage_ + bytes;
+    flush(reinterpret_cast<const char*>(memory_usage_), sizeof(void*));
   } else {
     result = nullptr;
   }
@@ -57,6 +58,7 @@ void PmemManager::flush(const char* addr, size_t len) {
 }
 void PmemManager::Clear() {
   *memory_usage_ = 0;
+  flush(reinterpret_cast<const char*>(memory_usage_), sizeof(void*));
   alloc_bytes_remaining_ = write_buffer_size;
   alloc_ptr_ = GetDataStart();
 }
