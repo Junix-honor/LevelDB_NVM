@@ -772,6 +772,7 @@ class Benchmark {
     options.nvm_option.use_nvm_mem_module = FLAGS_use_nvm;
     options.max_file_size = FLAGS_max_file_size;
     options.block_size = FLAGS_block_size;
+    options.compression = kNoCompression;
     if (FLAGS_comparisons) {
       options.comparator = &count_comparator_;
     }
@@ -857,11 +858,13 @@ class Benchmark {
     ReadOptions options;
     std::string value;
     int found = 0;
+    int64_t bytes = 0;
     KeyBuffer key;
     for (int i = 0; i < reads_; i++) {
       const int k = thread->rand.Uniform(FLAGS_num);
       key.Set(k);
       if (db_->Get(options, key.slice(), &value).ok()) {
+        bytes += key.slice().size() + value.size();
         found++;
       }
       thread->stats.FinishedSingleOp();
@@ -869,6 +872,7 @@ class Benchmark {
     char msg[100];
     std::snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
     thread->stats.AddMessage(msg);
+    thread->stats.AddBytes(bytes);
   }
 
   void ReadMissing(ThreadState* thread) {
@@ -1031,7 +1035,7 @@ int main(int argc, char** argv) {
   FLAGS_max_file_size = leveldb::Options().max_file_size;
   FLAGS_block_size = leveldb::Options().block_size;
   FLAGS_open_files = leveldb::Options().max_open_files;
-  FLAGS_use_nvm=leveldb::Options().nvm_option.use_nvm_mem_module;
+  FLAGS_use_nvm = leveldb::Options().nvm_option.use_nvm_mem_module;
   std::string default_db_path;
 
   for (int i = 1; i < argc; i++) {
@@ -1063,10 +1067,11 @@ int main(int argc, char** argv) {
       FLAGS_threads = n;
     } else if (sscanf(argv[i], "--value_size=%d%c", &n, &junk) == 1) {
       FLAGS_value_size = n;
-    } else if (sscanf(argv[i], "--write_buffer_size=%d%c", &n, &junk) == 1) {
-      FLAGS_write_buffer_size = n;
-    } else if (sscanf(argv[i], "--nvm_write_buffer_size=%llu%c", &ulln, &junk) ==
+    } else if (sscanf(argv[i], "--write_buffer_size=%llu%c", &ulln, &junk) ==
                1) {
+      FLAGS_write_buffer_size = ulln;
+    } else if (sscanf(argv[i], "--nvm_write_buffer_size=%llu%c", &ulln,
+                      &junk) == 1) {
       FLAGS_nvm_write_buffer_size = ulln;
     } else if (sscanf(argv[i], "--max_file_size=%d%c", &n, &junk) == 1) {
       FLAGS_max_file_size = n;
@@ -1083,7 +1088,9 @@ int main(int argc, char** argv) {
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
     } else if (strncmp(argv[i], "--nvm", 5) == 0) {
-      FLAGS_use_nvm=true;
+      FLAGS_use_nvm = true;
+    } else if (sscanf(argv[i], "--db_size=%d%c", &n, &junk) == 1) {
+      FLAGS_num = (1024ul * 1024 * 1024 * n) / FLAGS_value_size;
     } else {
       std::fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       std::exit(1);
