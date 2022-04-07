@@ -4,6 +4,14 @@
 
 #include "db/db_impl.h"
 
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "db/builder.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
@@ -14,21 +22,13 @@
 #include "db/table_cache.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
-#include <algorithm>
-#include <atomic>
-#include <cstdint>
-#include <cstdio>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
 #include "leveldb/table.h"
 #include "leveldb/table_builder.h"
 #include "leveldb/write_callback.h"
-
+#include "nvm_mod/memtable_nvm.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -36,8 +36,9 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
-
-#include "nvm_mod/memtable_nvm.h"
+#ifdef PERF_LOG
+#include "util/perf_log.h"
+#endif
 
 namespace leveldb {
 
@@ -1309,8 +1310,23 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   // Unlock while reading from files and memtables
   {
     mutex_.Unlock();
-    // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
+#ifdef PERF_LOG
+    bool found;
+    uint64_t start_micros = benchmark::NowMicros();
+    found = mem->Get(lkey, value, &seq, &s);
+    if (!found) found = imm != NULL && imm->Get(lkey, value, &seq, &s);
+    benchmark::LogMicros(benchmark::GET_MEMTABLE,
+                         benchmark::NowMicros() - start_micros);
+    if (!found) {
+      start_micros = benchmark::NowMicros();
+      s = current->Get(options, lkey, value, &stats);
+      benchmark::LogMicros(benchmark::GET_VERSION,
+                           benchmark::NowMicros() - start_micros);
+      have_stat_update = true;
+    }
+#else
+    // First look in the memtable, then in the immutable memtable (if any).
     if (mem->Get(lkey, value, &seq, &s)) {  //先向memtable中查询
       // Done
     } else if (imm != nullptr &&
@@ -1320,6 +1336,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
+#endif
     mutex_.Lock();
   }
 
@@ -1392,7 +1409,14 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
 
   // 首先要制作出空余空间来写入
   // May temporarily unlock and wait.
+#ifdef PERF_LOG
+  uint64_t micros = benchmark::NowMicros();
   Status status = MakeRoomForWrite(updates == nullptr);
+  benchmark::LogMicros(benchmark::FOREGROUND_COMPACTION,
+                       benchmark::NowMicros() - micros);
+#else
+  Status status = MakeRoomForWrite(updates == nullptr);
+#endif
 
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
@@ -1411,7 +1435,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
     {
       mutex_.Unlock();
 
-      //添加log
+//添加log
+#ifdef PERF_LOG
+      uint64_t micros = benchmark::NowMicros();
       bool sync_error = false;
       if (!mem_->IsPersistent()) {
         status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
@@ -1422,10 +1448,31 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
           }
         }
       }
+      benchmark::LogMicros(benchmark::LOG,
+                           benchmark::NowMicros() - micros);
+#else
+      bool sync_error = false;
+      if (!mem_->IsPersistent()) {
+        status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
+        if (status.ok() && options.sync) {
+          status = logfile_->Sync();
+          if (!status.ok()) {
+            sync_error = true;
+          }
+        }
+      }
+#endif
 
       //插入到memtable
       if (status.ok()) {
+#ifdef PERF_LOG
+        uint64_t micros = benchmark::NowMicros();
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
+        benchmark::LogMicros(benchmark::INSERT,
+                             benchmark::NowMicros() - micros);
+#else
+        status = WriteBatchInternal::InsertInto(write_batch, mem_);
+#endif
       }
       mutex_.Lock();
       if (sync_error) {

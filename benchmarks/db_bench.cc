@@ -18,6 +18,7 @@
 #include "util/crc32c.h"
 #include "util/histogram.h"
 #include "util/mutexlock.h"
+#include "util/perf_log.h"
 #include "util/random.h"
 #include "util/testutil.h"
 
@@ -335,6 +336,7 @@ class Stats {
       std::fprintf(stdout, "Microseconds per op:\n%s\n",
                    hist_.ToString().c_str());
     }
+    std::fprintf(stdout, "%s\n", leveldb::benchmark::GetHistogram().c_str());
     std::fflush(stdout);
   }
 };
@@ -606,7 +608,9 @@ class Benchmark {
           Open();
         }
       }
-
+#ifdef PERF_LOG
+      leveldb::benchmark::ClearPerfLog();
+#endif
       if (method != nullptr) {
         RunBenchmark(num_threads, name, method);
       }
@@ -1030,6 +1034,9 @@ class Benchmark {
 }  // namespace leveldb
 
 int main(int argc, char** argv) {
+#ifdef PERF_LOG
+  leveldb::benchmark::CreatePerfLog();
+#endif
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
   FLAGS_nvm_write_buffer_size = leveldb::Options().nvm_option.write_buffer_size;
   FLAGS_max_file_size = leveldb::Options().max_file_size;
@@ -1108,5 +1115,8 @@ int main(int argc, char** argv) {
 
   leveldb::Benchmark benchmark;
   benchmark.Run();
+#ifdef PERF_LOG
+  leveldb::benchmark::ClosePerfLog();
+#endif
   return 0;
 }
