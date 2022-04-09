@@ -36,6 +36,7 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/my_log.h"
 #ifdef PERF_LOG
 #include "util/perf_log.h"
 #endif
@@ -562,7 +563,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
 
     // memtable满， 需要执行compaction
-    if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
+    if (mem->ApproximateMemoryUsage() > current_write_buffer_size) {
       compactions++;
       *save_manifest = true;
       status = WriteLevel0Table(mem, edit, nullptr);
@@ -682,6 +683,10 @@ Status DBImpl::WriteLevel0Table(MemTableRep* mem, VersionEdit* edit,
 }
 
 void DBImpl::CompactMemTable() {
+#ifdef PERF_LOG
+  uint64_t strat = env_->NowMicros();
+  double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
 
@@ -697,7 +702,7 @@ void DBImpl::CompactMemTable() {
     s = Status::IOError("Deleting DB during memtable compaction");
   }
 
-  // Replace immutable memtable with the generated Table
+  // Replace immutable memtable with the generated Tabl e
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
@@ -713,6 +718,12 @@ void DBImpl::CompactMemTable() {
   } else {
     RecordBackgroundError(s);
   }
+#ifdef PERF_LOG
+  uint64_t end = env_->NowMicros();
+  double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+  RECORD_INFO(6, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+              relative_end - relative_start);
+#endif
 }
 
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
@@ -841,6 +852,10 @@ void DBImpl::BackgroundCall() {
 // a. size compaction : 文件过多或文件过大
 // b. seek compaction: seek 次数过多。
 void DBImpl::BackgroundCompaction() {
+#ifdef PERF_LOG
+  uint64_t strat = env_->NowMicros();
+  double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
   mutex_.AssertHeld();
 
   if (imm_ != nullptr) {
@@ -920,6 +935,12 @@ void DBImpl::BackgroundCompaction() {
     }
     manual_compaction_ = nullptr;
   }
+#ifdef PERF_LOG
+  uint64_t end = env_->NowMicros();
+  double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+  RECORD_INFO(8, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+              relative_end - relative_start);
+#endif
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -1039,6 +1060,10 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
+#ifdef PERF_LOG
+  uint64_t strat = env_->NowMicros();
+  double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
@@ -1212,6 +1237,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
   VersionSet::LevelSummaryStorage tmp;
   Log(options_.info_log, "compacted to: %s", versions_->LevelSummary(&tmp));
+#ifdef PERF_LOG
+  uint64_t end = env_->NowMicros();
+  double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+  RECORD_INFO(7, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+              relative_end - relative_start);
+#endif
   return status;
 }
 
@@ -1313,16 +1344,16 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     LookupKey lkey(key, snapshot);
 #ifdef PERF_LOG
     bool found;
-    uint64_t start_micros = benchmark::NowMicros();
+    uint64_t start_micros = env_->NowMicros();
     found = mem->Get(lkey, value, &seq, &s);
     if (!found) found = imm != NULL && imm->Get(lkey, value, &seq, &s);
     benchmark::LogMicros(benchmark::GET_MEMTABLE,
-                         benchmark::NowMicros() - start_micros);
+                         env_->NowMicros() - start_micros);
     if (!found) {
-      start_micros = benchmark::NowMicros();
+      start_micros = env_->NowMicros();
       s = current->Get(options, lkey, value, &stats);
       benchmark::LogMicros(benchmark::GET_VERSION,
-                           benchmark::NowMicros() - start_micros);
+                           env_->NowMicros() - start_micros);
       have_stat_update = true;
     }
 #else
@@ -1410,10 +1441,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
   // 首先要制作出空余空间来写入
   // May temporarily unlock and wait.
 #ifdef PERF_LOG
-  uint64_t micros = benchmark::NowMicros();
+  uint64_t micros = env_->NowMicros();
   Status status = MakeRoomForWrite(updates == nullptr);
   benchmark::LogMicros(benchmark::FOREGROUND_COMPACTION,
-                       benchmark::NowMicros() - micros);
+                       env_->NowMicros() - micros);
 #else
   Status status = MakeRoomForWrite(updates == nullptr);
 #endif
@@ -1437,7 +1468,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
 
 //添加log
 #ifdef PERF_LOG
-      uint64_t micros = benchmark::NowMicros();
+      uint64_t micros = env_->NowMicros();
       bool sync_error = false;
       if (!mem_->IsPersistent()) {
         status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
@@ -1448,8 +1479,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
           }
         }
       }
-      benchmark::LogMicros(benchmark::LOG,
-                           benchmark::NowMicros() - micros);
+      benchmark::LogMicros(benchmark::LOG, env_->NowMicros() - micros);
 #else
       bool sync_error = false;
       if (!mem_->IsPersistent()) {
@@ -1466,10 +1496,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates,
       //插入到memtable
       if (status.ok()) {
 #ifdef PERF_LOG
-        uint64_t micros = benchmark::NowMicros();
+        uint64_t micros = env_->NowMicros();
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
         benchmark::LogMicros(benchmark::INSERT,
-                             benchmark::NowMicros() - micros);
+                             env_->NowMicros() - micros);
 #else
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
 #endif
@@ -1589,12 +1619,24 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // individual write by 1ms to reduce latency variance.  Also,
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
+
+#ifdef PERF_LOG
+      uint64_t strat = env_->NowMicros();
+      double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
       mutex_.Unlock();
       // 让写延迟1ms，休眠期间，让出cpu给compaction thread，
       //并且不与compaction thread竞争
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
+
+#ifdef PERF_LOG
+      uint64_t end = env_->NowMicros();
+      double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+      RECORD_INFO(3, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+                  relative_end - relative_start);
+#endif
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= current_write_buffer_size)) {
       //有足够的空间
@@ -1605,12 +1647,32 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
       Log(options_.info_log, "Current memtable full; waiting...\n");
+#ifdef PERF_LOG
+      uint64_t strat = env_->NowMicros();
+      double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
       background_work_finished_signal_.Wait();
+#ifdef PERF_LOG
+      uint64_t end = env_->NowMicros();
+      double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+      RECORD_INFO(4, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+                  relative_end - relative_start);
+#endif
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // 达到最大L0数（12），卡死后序线程，直到Compaction完成
       // There are too many level-0 files.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
+#ifdef PERF_LOG
+      uint64_t strat = env_->NowMicros();
+      double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+#endif
       background_work_finished_signal_.Wait();
+#ifdef PERF_LOG
+      uint64_t end = env_->NowMicros();
+      double relative_end = (end - benchmark::bench_start_time) * 1e-6;
+      RECORD_INFO(5, "%.4f,%.4f,%.4f\n", relative_start, relative_end,
+                  relative_end - relative_start);
+#endif
     } else {
       // 将mem_转为imm_, 生成新的log_
       // Attempt to switch to a new memtable and trigger compaction of old
@@ -1847,7 +1909,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
       impl->log_ = new log::Writer(lfile);
       impl->mem_ = new MemTable(impl->internal_comparator_,
                                 impl->GetLatestSequenceNumber());
-      impl->current_write_buffer_size = options.write_buffer_size;
+      impl->current_write_buffer_size = impl->options_.write_buffer_size;
       impl->mem_->Ref();
     }
   }

@@ -205,6 +205,8 @@ target_sources(leveldb
         "util/perf_log.cc"
         "util/histogram.cc"
         "util/histogram.h"
+        "util/my_log.h"
+        "util/my_log.cc"
         "nvm_mod/nvm_option.h"
         "nvm_mod/nvm_option.cc"
         "nvm_mod/pmem_manager.h"

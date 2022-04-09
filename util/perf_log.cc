@@ -40,6 +40,8 @@ void ClosePerfLog() {
   log = nullptr;
 }
 
+uint64_t bench_start_time;
+
 }  // namespace benchmark
 
 }  // namespace leveldb

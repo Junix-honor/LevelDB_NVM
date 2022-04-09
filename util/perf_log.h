@@ -66,5 +66,7 @@ extern uint64_t NowMicros();
 extern void LogMicros(Type, uint64_t);
 extern std::string GetHistogram();
 extern void ClosePerfLog();
+
+extern uint64_t bench_start_time;
 }  // namespace benchmark
 }  // namespace leveldb

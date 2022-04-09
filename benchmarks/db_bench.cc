@@ -18,6 +18,7 @@
 #include "util/crc32c.h"
 #include "util/histogram.h"
 #include "util/mutexlock.h"
+#include "util/my_log.h"
 #include "util/perf_log.h"
 #include "util/random.h"
 #include "util/testutil.h"
@@ -814,6 +815,14 @@ class Benchmark {
     Status s;
     int64_t bytes = 0;
     KeyBuffer key;
+
+    int64_t t_last_num = 0;
+    int64_t t_last_bytes = 0;
+    uint64_t t_start_time = g_env->NowMicros();
+    benchmark::bench_start_time = t_start_time;
+    uint64_t t_last_time = t_start_time;
+    uint64_t t_cur_time;
+
     for (int i = 0; i < num_; i += entries_per_batch_) {
       batch.Clear();
       for (int j = 0; j < entries_per_batch_; j++) {
@@ -828,6 +837,31 @@ class Benchmark {
         std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         std::exit(1);
       }
+
+#ifdef PERF_LOG
+      t_cur_time = g_env->NowMicros();
+      if (t_cur_time - t_last_time > 0.1 * 1e6) {
+        double use_time = (t_cur_time - t_last_time) * 1e-6;
+        int64_t ebytes = bytes - t_last_bytes;
+        double now = (t_cur_time - t_start_time) * 1e-6;
+        int64_t written_num = i - t_last_num;
+
+        RECORD_INFO(1, "%.2f,%.2f,%.1f,%.1f,%.2f,%.1f\n", now,
+                    (1.0 * ebytes / 1048576.0) / use_time,
+                    1.0 * written_num / use_time, 1.0 * bytes / 1048576.0,
+                    (1.0 * bytes / 1048576.0) / now, 1.0 * i / now);
+
+        t_last_time = t_cur_time;
+        t_last_bytes = bytes;
+        t_last_num = i;
+
+        std::string stats;
+        if (!db_->GetProperty("leveldb.stats", &stats)) {
+          stats = "(failed)";
+        }
+        RECORD_INFO(2, "now= %.2f s\n%s\n", now, stats.c_str());
+      }
+#endif
     }
     thread->stats.AddBytes(bytes);
   }
@@ -1036,6 +1070,7 @@ class Benchmark {
 int main(int argc, char** argv) {
 #ifdef PERF_LOG
   leveldb::benchmark::CreatePerfLog();
+  leveldb::init_log_file();
 #endif
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
   FLAGS_nvm_write_buffer_size = leveldb::Options().nvm_option.write_buffer_size;
