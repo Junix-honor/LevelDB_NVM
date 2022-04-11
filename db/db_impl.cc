@@ -133,7 +133,7 @@ Options SanitizeOptions(const std::string& dbname,
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != nullptr) ? ipolicy : nullptr;
   ClipToRange(&result.max_open_files, 64 + kNumNonTableCacheFiles, 50000);
-  ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
+  // ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
   ClipToRange(&result.max_file_size, 1 << 20, 1 << 30);
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (result.info_log == nullptr) {
@@ -563,7 +563,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
 
     // memtable满， 需要执行compaction
-    if (mem->ApproximateMemoryUsage() > current_write_buffer_size) {
+    if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
       *save_manifest = true;
       status = WriteLevel0Table(mem, edit, nullptr);
@@ -1676,6 +1676,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else {
       // 将mem_转为imm_, 生成新的log_
       // Attempt to switch to a new memtable and trigger compaction of old
+#ifdef PERF_LOG
+      uint64_t strat = env_->NowMicros();
+      double relative_start = (strat - benchmark::bench_start_time) * 1e-6;
+      RECORD_INFO(9, "%.4f\n", relative_start);
+#endif
 
       if (use_nvm_mem_module && !mem_->IsPersistent()) {
         imm_ = mem_;

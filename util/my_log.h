@@ -31,15 +31,17 @@ namespace leveldb {
 #endif
 
 
-const std::string log_file0("NVM_LOG");
-const std::string log_file1("OP_TIME.csv");
-const std::string log_file2("OP_DATA");
-const std::string log_file3("STALL_SLEEP.csv");
-const std::string log_file4("STALL_MINOR_COMPACTION.csv");
-const std::string log_file5("STALL_MAJOR_COMPACTION.csv");
-const std::string log_file6("BACKGROUND_MINOR_COMPACTION.csv");
-const std::string log_file7("BACKGROUND_MAJOR_COMPACTION.csv");
-const std::string log_file8("BACKGROUND_COMPACTION.csv");
+const std::string log_file0(".//perf_log//NVM_LOG");
+const std::string log_file1(".//perf_log//OP_TIME.csv");
+const std::string log_file2(".//perf_log//OP_DATA");
+const std::string log_file3(".//perf_log//STALL_SLEEP.csv");
+const std::string log_file4(".//perf_log//STALL_MINOR_COMPACTION.csv");
+const std::string log_file5(".//perf_log//STALL_MAJOR_COMPACTION.csv");
+const std::string log_file6(".//perf_log//BACKGROUND_MINOR_COMPACTION.csv");
+const std::string log_file7(".//perf_log//BACKGROUND_MAJOR_COMPACTION.csv");
+const std::string log_file8(".//perf_log//BACKGROUND_COMPACTION.csv");
+const std::string log_file9(".//perf_log//SWITCH_MEMTABLE.csv");
+const std::string log_file10(".//perf_log//PERF_LOG");
 // const std::string log_file4("Latency.csv");
 // const std::string log_file5("PerSecondLatency.csv");
 

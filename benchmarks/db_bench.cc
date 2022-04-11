@@ -333,11 +333,16 @@ class Stats {
     std::fprintf(stdout, "%-12s : %11.3f micros/op;%s%s\n",
                  name.ToString().c_str(), seconds_ * 1e6 / done_,
                  (extra.empty() ? "" : " "), extra.c_str());
+    RECORD_INFO(10, "%-12s : %11.3f micros/op;%s%s\n", name.ToString().c_str(),
+                seconds_ * 1e6 / done_, (extra.empty() ? "" : " "),
+                extra.c_str());
     if (FLAGS_histogram) {
       std::fprintf(stdout, "Microseconds per op:\n%s\n",
                    hist_.ToString().c_str());
+      RECORD_INFO(10, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
     }
-    std::fprintf(stdout, "%s\n", leveldb::benchmark::GetHistogram().c_str());
+    RECORD_INFO(10, "%s\n", leveldb::benchmark::GetHistogram().c_str());
+    // std::fprintf(stdout, "%s\n", leveldb::benchmark::GetHistogram().c_str());
     std::fflush(stdout);
   }
 };
