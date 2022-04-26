@@ -845,7 +845,7 @@ class Benchmark {
 
 #ifdef PERF_LOG
       t_cur_time = g_env->NowMicros();
-      if (t_cur_time - t_last_time > 0.1 * 1e6) {
+      if (t_cur_time - t_last_time > 0.001 * 1e6) {
         double use_time = (t_cur_time - t_last_time) * 1e-6;
         int64_t ebytes = bytes - t_last_bytes;
         double now = (t_cur_time - t_start_time) * 1e-6;

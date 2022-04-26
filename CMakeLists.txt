@@ -8,6 +8,7 @@ project(leveldb VERSION 1.23.0 LANGUAGES C CXX)
 
 # perf_Log
 add_definitions(-DPERF_LOG=1)
+# add_definitions(-DMEM_PERF=1)
 
 # C standard can be overridden when this is used as a sub-project.
 if (NOT CMAKE_C_STANDARD)

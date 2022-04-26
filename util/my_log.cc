@@ -51,6 +51,11 @@ void init_log_file() {
   if (fp == nullptr) printf("log failed\n");
   fclose(fp);
 
+  fp = fopen(log_file11.c_str(), "w");
+  if (fp == nullptr) printf("log failed\n");
+  RECORD_INFO(11, "relative_start,relative_end,time\n");
+  fclose(fp);
+
   // fp = fopen(log_file4.c_str(), "w");
   // if(fp == nullptr) printf("log failed\n");
   // fclose(fp);
@@ -75,7 +80,7 @@ void init_log_file() {
 void LZW_LOG(int file_num, const char* format, ...) {
   va_list ap;
   va_start(ap, format);
-  char buf[8192];
+  char buf[1000000];
   vsprintf(buf, format, ap);
   va_end(ap);
 
@@ -113,6 +118,9 @@ void LZW_LOG(int file_num, const char* format, ...) {
       break;
     case 10:
       log_file = &log_file10;
+      break;
+    case 11:
+      log_file = &log_file11;
       break;
     default:
       return;
